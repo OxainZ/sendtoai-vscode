@@ -1,0 +1,89 @@
+{
+  "name": "sendtoai",
+  "displayName": "SendToAI — Bundle Project to AI",
+  "description": "Bundle your entire project into one paste for Claude, ChatGPT, or any AI. Bypasses the 20-file limit.",
+  "version": "3.0.1",
+  "publisher": "OxainZ",
+  "homepage": "https://github.com/OxainZ/sendtoai-vscode",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OxainZ/sendtoai-vscode.git"
+  },
+  "icon": "resources/icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["AI", "Other"],
+  "keywords": ["AI", "Claude", "ChatGPT", "clipboard", "bundle", "project", "context"],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "sendtoai.bundle",
+        "title": "SendToAI: Bundle Project to Clipboard"
+      },
+      {
+        "command": "sendtoai.bundleFolder",
+        "title": "SendToAI: Bundle This Folder"
+      },
+      {
+        "command": "sendtoai.enterLicenseKey",
+        "title": "SendToAI: Enter License Key"
+      },
+      {
+        "command": "sendtoai.clearLicenseKey",
+        "title": "SendToAI: Clear License Key"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "sendtoai.bundleFolder",
+          "when": "explorerResourceIsFolder",
+          "group": "sendtoai@1"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "sendtoai.bundle",
+        "key": "ctrl+shift+a",
+        "mac": "cmd+shift+a",
+        "when": "editorTextFocus || !inputFocus"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sendtoai-sidebar",
+          "title": "SendToAI",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "sendtoai-sidebar": [
+        {
+          "type": "webview",
+          "id": "sendtoai.panel",
+          "name": "SendToAI"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "SendToAI",
+      "properties": {}
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  }
+}
