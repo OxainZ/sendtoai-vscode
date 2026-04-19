@@ -11,7 +11,7 @@ const WARN_AFTER_MS       = 30 * 24 * 60 * 60 * 1000;
 const HARD_BLOCK_AFTER_MS = 365 * 24 * 60 * 60 * 1000;
 const SECRETS_KEY         = 'sendtoai.activation';
 
-const LICENSE_RE = /^SNDAI-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
+const LICENSE_RE = /^([A-Z0-9]{8}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{12}|SNDAI-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4})$/i;
 
 interface LicenseCache {
   key: string;
@@ -313,13 +313,13 @@ export function activate(context: vscode.ExtensionContext) {
       vscode.commands.executeCommand('sendtoai.panel.focus');
     }),
     vscode.commands.registerCommand('sendtoai.upgradeToPro', () => {
-      vscode.env.openExternal(vscode.Uri.parse('https://sendtoai.lemonsqueezy.com/checkout'));
+      vscode.env.openExternal(vscode.Uri.parse('https://sendtoai.lemonsqueezy.com/checkout/buy/e8764352-b784-409e-8d59-c44fd9aad90c'));
     }),
 
     vscode.commands.registerCommand('sendtoai.enterLicenseKey', async () => {
       const inputKey = await vscode.window.showInputBox({
         prompt: 'Enter your SendToAI Pro license key',
-        placeHolder: 'SNDAI-XXXX-XXXX-XXXX-XXXX',
+        placeHolder: 'XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX',
         ignoreFocusOut: true,
       });
       if (!inputKey) { return; }

@@ -486,7 +486,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
 <div class="upgrade-banner" id="upgradeBanner">
   <p>⚡ <strong>Pro feature</strong> — Free tier is limited to 50 files.<br>
   Upgrade for unlimited files, presets, and git diff mode.</p>
-  <button class="btn-upgrade" onclick="openUrl('https://sendtoai.lemonsqueezy.com/checkout')">Upgrade to Pro →</button>
+  <button class="btn-upgrade" onclick="openUrl('https://sendtoai.lemonsqueezy.com/checkout/buy/e8764352-b784-409e-8d59-c44fd9aad90c')">Upgrade to Pro →</button>
   <button class="btn-upgrade" style="margin-top:6px;background:#444;" onclick="send('enterLicenseKey')">Already have a key? Activate it →</button>
 </div>
 
