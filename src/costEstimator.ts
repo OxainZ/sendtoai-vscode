@@ -5,7 +5,7 @@ export interface CostEstimate {
   haikuRaw: number;
 }
 
-const PRICE_PER_M = { haiku: 1.0, sonnet: 3.0, opus: 5.0 };
+const PRICE_PER_M = { haiku: 1.0, sonnet: 3.0, opus: 15.0 };
 
 function fmt(tokens: number, pricePerM: number): string {
   const cost = (tokens / 1_000_000) * pricePerM;
