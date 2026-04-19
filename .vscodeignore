@@ -6,3 +6,6 @@ tsconfig.json
 **/*.map
 node_modules/**
 .DS_Store
+ALL-PLATFORM-UPDATES-READY.md
+package-extension.js
+publish-extension.js

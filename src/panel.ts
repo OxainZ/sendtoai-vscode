@@ -3,7 +3,7 @@ import { BundleResult, FileNode } from './bundler';
 import { CostEstimate } from './costEstimator';
 
 export type BundleMode   = 'project' | 'tabs' | 'git';
-export type OutputFormat = 'standard' | 'xml' | 'compact';
+export type OutputFormat = 'standard' | 'xml' | 'compact' | 'minimal';
 
 export interface PanelRequest {
   mode:           BundleMode;
@@ -12,6 +12,7 @@ export interface PanelRequest {
   selectedPaths?: Set<string>;
   notes?:         string;
   includeContext: boolean;
+  targetWindow:   number; // 0 = no limit
 }
 
 export class SendToAIPanel implements vscode.WebviewViewProvider {
@@ -46,6 +47,9 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
   public sendPresetsLoaded(presets: { name: string; paths: string[] }[]): void {
     this._view?.webview.postMessage({ command: 'presetsLoaded', presets });
   }
+  public sendProStatus(isPro: boolean): void {
+    this._view?.webview.postMessage({ command: 'proStatus', isPro });
+  }
   public showUpgradePrompt(): void {
     this._view?.webview.postMessage({ command: 'showUpgrade' });
   }
@@ -68,6 +72,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
       selectedPaths?: string[];
       notes?: string;
       includeContext?: boolean;
+      targetWindow?: number;
       presetName?: string;
       presetPaths?: string[];
     }) => {
@@ -98,24 +103,32 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
             selectedPaths:  msg.selectedPaths ? new Set<string>(msg.selectedPaths) : undefined,
             notes:          msg.notes,
             includeContext: msg.includeContext ?? false,
+            targetWindow:   msg.targetWindow   ?? 0,
           });
           break;
         case 'copyAgain':
           if (this._lastBundle) {
-            vscode.env.clipboard.writeText(this._lastBundle).then(() => {
+            Promise.resolve(vscode.env.clipboard.writeText(this._lastBundle)).then(() => {
               vscode.window.showInformationMessage('✅ Copied again — paste into your AI chat!');
+            }, () => {
+              vscode.window.showErrorMessage('SendToAI: Failed to copy to clipboard.');
             });
           }
           break;
         case 'openUrl':
           if (msg.url) { vscode.env.openExternal(vscode.Uri.parse(msg.url)); }
           break;
+        case 'enterLicenseKey':
+          vscode.commands.executeCommand('sendtoai.enterLicenseKey');
+          break;
       }
     });
   }
 
   public updateStats(result: BundleResult, cost: CostEstimate): void {
-    this._lastBundle = result.bundle;
+    // Cap stored bundle at 2 MB — prevents multi-MB Gemini bundles sitting in memory indefinitely
+    const bundleTooBig = result.bundle.length > 2_000_000;
+    this._lastBundle = bundleTooBig ? undefined : result.bundle;
     this._view?.webview.postMessage({
       command:       'stats',
       folderName:    result.folderName,
@@ -125,6 +138,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
       haiku:         cost.haiku,
       sonnet:        cost.sonnet,
       opus:          cost.opus,
+      bundleTooBig,
       fileTypes:     result.fileTypes,
       timestamp:     new Date().toLocaleTimeString(),
     });
@@ -143,6 +157,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -321,8 +336,11 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
   .stat-lbl { color: var(--vscode-descriptionForeground); }
   .stat-val { font-weight: 600; }
   .progress-wrap { margin-bottom: 8px; }
-  .progress-meta { display: flex; justify-content: space-between; font-size: 10px; color: var(--vscode-descriptionForeground); margin-bottom: 3px; }
-  .bar-bg { height: 5px; border-radius: 3px; background: var(--vscode-editor-inactiveSelectionBackground); overflow: hidden; }
+  .ctx-row { display: flex; align-items: center; font-size: 10px; color: var(--vscode-descriptionForeground); margin-bottom: 2px; margin-top: 5px; }
+  .ctx-lbl { flex: 1; }
+  .ctx-limit { font-size: 9px; opacity: 0.6; margin-right: 6px; }
+  .ctx-pct { font-weight: 600; min-width: 32px; text-align: right; }
+  .bar-bg { height: 4px; border-radius: 3px; background: var(--vscode-editor-inactiveSelectionBackground); overflow: hidden; margin-bottom: 1px; }
   .bar-fill { height: 100%; border-radius: 3px; transition: width 0.4s, background 0.4s; }
   .cost-card { background: var(--vscode-editor-inactiveSelectionBackground); border-radius: 5px; padding: 9px 11px; margin-bottom: 8px; }
   .cost-title { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; color: var(--vscode-descriptionForeground); text-transform: uppercase; margin-bottom: 5px; }
@@ -365,7 +383,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
 <!-- Header -->
 <div class="header">
   <div>
-    <div class="logo"><span class="logo-icon">⚡</span> SendToAI</div>
+    <div class="logo"><span class="logo-icon">⚡</span> SendToAI <span id="proBadge" style="display:none;background:linear-gradient(135deg,#f7b733,#e07b39);color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:10px;letter-spacing:0.6px;vertical-align:middle;margin-left:4px;">PRO</span></div>
     <div class="tagline">Bundle project → paste into any AI</div>
   </div>
 </div>
@@ -438,6 +456,19 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
     <option value="standard">Standard — plain text with headers</option>
     <option value="xml">Claude XML — structured tags (best for Claude)</option>
     <option value="compact">Compact — strip comments, save ~20% tokens</option>
+    <option value="minimal">Minimal — short headers + strip comments (max token savings)</option>
+  </select>
+</div>
+
+<!-- Target AI Window -->
+<div class="section">
+  <div class="section-label">Fit to AI Window <span style="font-size:9px;background:linear-gradient(135deg,#f7b733,#e07b39);color:#fff;padding:1px 5px;border-radius:8px;font-weight:800;vertical-align:middle;">PRO</span></div>
+  <select id="windowSelect">
+    <option value="0">No limit (bundle all selected)</option>
+    <option value="8000">ChatGPT Free — 8K tokens</option>
+    <option value="32000">ChatGPT Plus — 32K tokens</option>
+    <option value="200000">Claude — 200K tokens</option>
+    <option value="1000000">Gemini — 1M tokens</option>
   </select>
 </div>
 
@@ -455,14 +486,15 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
 <div class="upgrade-banner" id="upgradeBanner">
   <p>⚡ <strong>Pro feature</strong> — Free tier is limited to 50 files.<br>
   Upgrade for unlimited files, presets, and git diff mode.</p>
-  <button class="btn-upgrade" onclick="openUrl('https://sendtoai.dev/pro')">Upgrade at sendtoai.dev/pro →</button>
+  <button class="btn-upgrade" onclick="openUrl('https://sendtoai.lemonsqueezy.com/checkout')">Upgrade to Pro →</button>
+  <button class="btn-upgrade" style="margin-top:6px;background:#444;" onclick="send('enterLicenseKey')">Already have a key? Activate it →</button>
 </div>
 
 <!-- Bundle Button -->
 <button class="btn-bundle" id="bundleBtn" onclick="doBundle()">
   <span id="btnIcon">📦</span>
   <span id="btnLabel">Bundle to Clipboard</span>
-  <span id="shortcutHint" style="font-size:10px;font-weight:400;opacity:0.7">Ctrl+Shift+A</span>
+  <span id="shortcutHint" style="font-size:10px;font-weight:400;opacity:0.7">Ctrl+Alt+A</span>
 </button>
 
 <!-- AI Quick Open -->
@@ -470,6 +502,12 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
   <button class="btn-ai claude"  onclick="openUrl('https://claude.ai')">Claude ↗</button>
   <button class="btn-ai chatgpt" onclick="openUrl('https://chatgpt.com')">ChatGPT ↗</button>
   <button class="btn-ai gemini"  onclick="openUrl('https://gemini.google.com')">Gemini ↗</button>
+</div>
+
+<!-- Pro activation row -->
+<div id="activateRow" style="text-align:center;margin-bottom:8px;">
+  <span style="font-size:10px;color:var(--vscode-descriptionForeground);">Have a Pro license? </span>
+  <a href="#" style="font-size:10px;color:#e07b39;text-decoration:none;" onclick="send('enterLicenseKey');return false;">Activate it here →</a>
 </div>
 
 <div class="divider"></div>
@@ -483,8 +521,14 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
     <div class="stat-row"><span class="stat-lbl">Est. tokens</span><span class="stat-val" id="tk">—</span></div>
   </div>
   <div class="progress-wrap">
-    <div class="progress-meta"><span>Claude 200k context</span><span id="pctLabel">0%</span></div>
-    <div class="bar-bg"><div class="bar-fill" id="bar" style="width:0%;background:#4caf80"></div></div>
+    <div class="ctx-row"><span class="ctx-lbl">ChatGPT Free</span><span class="ctx-limit">8K</span><span class="ctx-pct" id="pctGptFree">0%</span></div>
+    <div class="bar-bg"><div class="bar-fill" id="barGptFree" style="width:0%"></div></div>
+    <div class="ctx-row"><span class="ctx-lbl">ChatGPT Plus</span><span class="ctx-limit">32K</span><span class="ctx-pct" id="pctGptPlus">0%</span></div>
+    <div class="bar-bg"><div class="bar-fill" id="barGptPlus" style="width:0%"></div></div>
+    <div class="ctx-row"><span class="ctx-lbl">Claude</span><span class="ctx-limit">200K</span><span class="ctx-pct" id="pctClaude">0%</span></div>
+    <div class="bar-bg"><div class="bar-fill" id="barClaude" style="width:0%"></div></div>
+    <div class="ctx-row"><span class="ctx-lbl">Gemini</span><span class="ctx-limit">1M</span><span class="ctx-pct" id="pctGemini">0%</span></div>
+    <div class="bar-bg"><div class="bar-fill" id="barGemini" style="width:0%"></div></div>
   </div>
   <div class="cost-card">
     <div class="cost-title">Cost per send</div>
@@ -501,7 +545,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
   <p class="timestamp" id="ts"></p>
 </div>
 
-<p class="shortcut"><kbd>Ctrl+Shift+A</kbd> / <kbd>⌘+Shift+A</kbd></p>
+<p class="shortcut"><kbd>Ctrl+Alt+A</kbd> / <kbd>⌘+Alt+A</kbd></p>
 
 <script>
   const vscode = acquireVsCodeApi();
@@ -545,7 +589,8 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
     document.getElementById('upgradeBanner').classList.remove('show');
     const notes          = document.getElementById('projectNotes').value.trim();
     const includeContext = document.getElementById('includeCtx').checked;
-    const extra = { mode: currentMode, format: getFormat(), prompt: getPromptText(), notes, includeContext };
+    const targetWindow = parseInt(document.getElementById('windowSelect').value || '0', 10);
+    const extra = { mode: currentMode, format: getFormat(), prompt: getPromptText(), notes, includeContext, targetWindow };
     if (currentMode === 'project' && treeBuilt) {
       extra.selectedPaths = getSelectedPaths();
     }
@@ -565,6 +610,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
 
   function requestScan() {
     treeBuilt = false;
+    collapsed.clear(); // Bug 39: stale dir paths from previous tree cause wrong visual state
     document.getElementById('treeScroll').innerHTML =
       '<div class="tree-loading">Scanning project…</div>';
     document.getElementById('pickerLabel').textContent = 'Scanning…';
@@ -580,35 +626,49 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
     return n >= 1000 ? '~' + (n / 1000).toFixed(1) + 'k' : '~' + n;
   }
 
-  function fileDescendants(node) {
+  // WeakMap caches: keyed by node object, so entries are GC'd when treeData is replaced.
+  // Avoids mutating the postMessage-received plain objects (Bug 44).
+  const descCache  = new WeakMap(); // node → string[] of descendant file paths
+  const countCache = new WeakMap(); // node → total file count
+  let   totalCount    = 0;  // root total, cached after precompute
+  let   selectedTokSum = 0; // running sum — O(1) via pathToTok deltas
+  const pathToTok = new Map(); // file path → tokenEst, built at scan time
+
+  // Builds descCache and countCache bottom-up in O(n) total (Bug 33, 44).
+  function precomputeDescendants(node) {
+    if (!node.isDir) {
+      countCache.set(node, 1);
+      pathToTok.set(node.path, node.tokenEst || 0);
+      return;
+    }
     const paths = [];
-    (function walk(n) {
-      if (!n.isDir) { paths.push(n.path); return; }
-      for (const c of n.children) { walk(c); }
-    })(node);
-    return paths;
+    let   cnt   = 0;
+    for (const c of node.children) {
+      precomputeDescendants(c);
+      cnt += countCache.get(c) ?? 0;
+      if (!c.isDir) { paths.push(c.path); }
+      else { for (const p of descCache.get(c)) { paths.push(p); } }
+    }
+    descCache.set(node, paths);
+    countCache.set(node, cnt);
   }
 
-  function totalFileCount(node) {
-    if (!node.isDir) { return 1; }
-    let n = 0;
-    for (const c of node.children) { n += totalFileCount(c); }
-    return n;
-  }
+  function fileDescendants(node) { return descCache.get(node) ?? []; }
 
-  function selectedTokenSum() {
-    let t = 0;
-    (function walk(n) {
-      if (!n.isDir) { if (checked.has(n.path)) { t += (n.tokenEst || 0); } return; }
-      for (const c of n.children) { walk(c); }
-    })(treeData);
-    return t;
+  function totalFileCount(node) { return countCache.get(node) ?? 0; }
+
+  // Delta-update selectedTokSum when paths are added/removed from checked.
+  function checkPaths(paths, add) {
+    for (const p of paths) {
+      if (add && !checked.has(p))  { checked.add(p);    selectedTokSum += (pathToTok.get(p) ?? 0); }
+      if (!add && checked.has(p))  { checked.delete(p); selectedTokSum -= (pathToTok.get(p) ?? 0); }
+    }
   }
 
   function updateSummary() {
     const sel   = checked.size;
-    const total = treeData ? totalFileCount(treeData) : 0;
-    const toks  = selectedTokenSum();
+    const total = totalCount;
+    const toks  = selectedTokSum;
     const tkStr = toks >= 1000 ? '~' + (toks / 1000).toFixed(1) + 'k' : '~' + toks;
     document.getElementById('pickerLabel').textContent =
       sel + ' / ' + total + ' files';
@@ -657,7 +717,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
         cb.checked       = allChk;
         cb.indeterminate = !allChk && someChk;
         cb.addEventListener('change', () => {
-          descs.forEach(p => cb.checked ? checked.add(p) : checked.delete(p));
+          checkPaths(descs, cb.checked);
           renderTree();
           updateSummary();
         });
@@ -692,7 +752,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
         cb.type    = 'checkbox';
         cb.checked = checked.has(node.path);
         cb.addEventListener('change', () => {
-          cb.checked ? checked.add(node.path) : checked.delete(node.path);
+          checkPaths([node.path], cb.checked);
           updateSummary();
           // Re-render only to update parent dir tri-state
           renderTree();
@@ -717,13 +777,14 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
   // ── Picker controls ────────────────────────────────────────────────────────────
   function pickerAll() {
     if (!treeData) { return; }
-    fileDescendants(treeData).forEach(p => checked.add(p));
+    checkPaths(fileDescendants(treeData), true);
     renderTree();
     updateSummary();
   }
 
   function pickerNone() {
     checked.clear();
+    selectedTokSum = 0;
     renderTree();
     updateSummary();
   }
@@ -738,7 +799,8 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
     const preset = presets.find(p => p.name === sel);
     if (!preset) { return; }
     checked.clear();
-    preset.paths.forEach(p => checked.add(p));
+    selectedTokSum = 0;
+    checkPaths(preset.paths, true);
     renderTree();
     updateSummary();
   }
@@ -802,6 +864,13 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
       document.getElementById('upgradeBanner').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       return;
     }
+    if (d.command === 'proStatus') {
+      const badge = document.getElementById('proBadge');
+      const activateRow = document.getElementById('activateRow');
+      badge.style.display = d.isPro ? 'inline' : 'none';
+      if (activateRow) { activateRow.style.display = d.isPro ? 'none' : 'block'; }
+      return;
+    }
     if (d.command === 'contextLoaded') {
       document.getElementById('projectNotes').value = d.notes || '';
       return;
@@ -830,10 +899,14 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
     }
     if (d.command === 'scanResult') {
       treeData  = d.tree;
+      pathToTok.clear();
+      precomputeDescendants(treeData); // builds descCache, countCache, pathToTok in O(n)
+      totalCount = totalFileCount(treeData);
       treeBuilt = true;
       // Default: select all files
       checked.clear();
-      fileDescendants(treeData).forEach(p => checked.add(p));
+      selectedTokSum = 0;
+      checkPaths(fileDescendants(treeData), true);
       renderTree();
       updateSummary();
       return;
@@ -851,11 +924,18 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
     document.getElementById('co').textContent = d.opus;
     document.getElementById('ts').textContent = 'Last bundled ' + d.timestamp;
 
-    const pct = Math.min((d.tokenEstimate / 200000) * 100, 100);
-    const bar = document.getElementById('bar');
-    bar.style.width = pct + '%';
-    bar.style.background = pct < 50 ? '#4caf80' : pct < 85 ? '#e0a039' : '#e05c5c';
-    document.getElementById('pctLabel').textContent = pct.toFixed(1) + '%';
+    function setBar(barId, pctId, limit) {
+      const pct = Math.min((d.tokenEstimate / limit) * 100, 100);
+      const bar = document.getElementById(barId);
+      bar.style.width = pct + '%';
+      bar.style.background = pct < 70 ? '#4caf80' : pct < 95 ? '#e0a039' : '#e05c5c';
+      document.getElementById(pctId).textContent = pct >= 100 ? 'OVER' : pct.toFixed(0) + '%';
+      document.getElementById(pctId).style.color = pct >= 100 ? '#e05c5c' : '';
+    }
+    setBar('barGptFree', 'pctGptFree', 8000);
+    setBar('barGptPlus', 'pctGptPlus', 32000);
+    setBar('barClaude',  'pctClaude',  200000);
+    setBar('barGemini',  'pctGemini',  1000000);
 
     const pills = document.getElementById('typePills');
     pills.innerHTML = '';
@@ -873,6 +953,11 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
     }
 
     document.getElementById('warnBox').style.display = d.tokenEstimate > 180000 ? 'block' : 'none';
+    const copyAgainBtn = document.querySelector('.btn-copy');
+    if (copyAgainBtn) {
+      copyAgainBtn.disabled = !!d.bundleTooBig;
+      copyAgainBtn.title = d.bundleTooBig ? 'Bundle too large to re-copy (>2 MB)' : '';
+    }
     document.getElementById('stats').classList.add('show');
   });
 </script>

@@ -1,252 +1,309 @@
 import * as vscode from 'vscode';
+import * as https from 'https';
+import { SendToAIPanel, PanelRequest } from './panel';
 import { buildBundle, scanProjectTree } from './bundler';
 import { estimateCost } from './costEstimator';
-import { SendToAIPanel, PanelRequest } from './panel';
 
-// ── License / Pro check ───────────────────────────────────────────────────────
+const PRO_FILE_LIMIT = 50;
+const PRODUCT_ID = 926714;
+const CACHE_TTL_MS        = 24 * 60 * 60 * 1000;         // 24 h  — re-validate when online
+const WARN_AFTER_MS       = 30 * 24 * 60 * 60 * 1000;    // 30 d  — start nudging user
+const HARD_BLOCK_AFTER_MS = 365 * 24 * 60 * 60 * 1000;   // 1 yr  — absolute offline limit
 
-const LICENSE_SECRET_KEY = 'sendtoai.licenseKey';
+const LICENSE_RE = /^SNDAI-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
 
-async function isProUser(context: vscode.ExtensionContext): Promise<boolean> {
-  const key = (await context.secrets.get(LICENSE_SECRET_KEY)) ?? '';
-  return key.trim().toUpperCase().startsWith('STAI-');
+interface LicenseCache {
+  key: string;
+  valid: boolean;
+  checkedAt: number;    // last time we attempted a remote check
+  lastValidAt: number;  // last time remote confirmed valid === true
 }
 
-// ── Preset helpers ────────────────────────────────────────────────────────────
+let cachedProStatus = false;
 
-interface Preset { name: string; paths: string[]; }
-
-function presetKey(uri: vscode.Uri): string {
-  return `sendtoai.presets.${uri.fsPath}`;
+function getLicenseKey(): string {
+  return vscode.workspace.getConfiguration('sendtoai').get<string>('licenseKey') ?? '';
 }
 
-function getPresets(context: vscode.ExtensionContext, uri: vscode.Uri): Preset[] {
-  return context.globalState.get<Preset[]>(presetKey(uri)) ?? [];
+function workspaceKey(suffix: string): string {
+  const root = (vscode.workspace.workspaceFolders?.[0]?.uri?.fsPath ?? 'global').replace(/\\/g, '/');
+  return `sendtoai.${root}.${suffix}`;
 }
 
-function savePresets(context: vscode.ExtensionContext, uri: vscode.Uri, presets: Preset[]): void {
-  context.globalState.update(presetKey(uri), presets);
-}
-
-// ── Activate ──────────────────────────────────────────────────────────────────
-
-export function activate(context: vscode.ExtensionContext): void {
-  // ── Sidebar panel ────────────────────────────────────────────────────────────
-  const panel = new SendToAIPanel(context.extensionUri);
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(SendToAIPanel.viewType, panel)
-  );
-
-  // ── Status bar ───────────────────────────────────────────────────────────────
-  const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-  statusBar.command = 'sendtoai.bundle';
-  statusBar.text = '$(file-zip) SendToAI';
-  statusBar.tooltip = 'SendToAI: Bundle project to clipboard (Ctrl+Shift+A)';
-  statusBar.show();
-  context.subscriptions.push(statusBar);
-
-  // ── License key commands ──────────────────────────────────────────────────────
-  context.subscriptions.push(
-    vscode.commands.registerCommand('sendtoai.enterLicenseKey', async () => {
-      const input = await vscode.window.showInputBox({
-        prompt: 'Enter your SendToAI Pro license key',
-        placeHolder: 'STAI-XXXX-XXXX-XXXX',
-        password: true,
-        validateInput: val => {
-          if (!val?.trim()) { return 'License key cannot be empty'; }
-          if (!val.trim().toUpperCase().startsWith('STAI-')) {
-            return 'Invalid key — SendToAI Pro keys start with STAI-';
-          }
-          return undefined;
-        },
+// Returns true=valid, false=invalid, null=network error
+function validateLicenseRemote(key: string): Promise<boolean | null> {
+  return new Promise(resolve => {
+    const body = JSON.stringify({ license_key: key, instance_name: 'vscode-sendtoai' });
+    const options = {
+      hostname: 'api.lemonsqueezy.com',
+      path: '/v1/licenses/validate',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+      },
+    };
+    const req = https.request(options, (res: import('http').IncomingMessage) => {
+      let data = '';
+      res.on('data', (chunk: Buffer) => { data += chunk; });
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          const valid = json.valid === true &&
+            json.meta?.product_id === PRODUCT_ID;
+          resolve(valid);
+        } catch {
+          resolve(null);
+        }
       });
-      if (!input) { return; }
-      await context.secrets.store(LICENSE_SECRET_KEY, input.trim());
-      vscode.window.showInformationMessage('✅ SendToAI Pro license key saved securely.');
-    })
-  );
+    });
+    req.on('error', () => resolve(null));
+    req.setTimeout(8000, () => { req.destroy(); resolve(null); });
+    req.write(body);
+    req.end();
+  });
+}
+
+async function refreshLicense(
+  key: string,
+  context: vscode.ExtensionContext,
+  force = false,
+): Promise<boolean> {
+  if (!LICENSE_RE.test(key)) {
+    cachedProStatus = false;
+    return false;
+  }
+
+  const cache = context.globalState.get<LicenseCache>('sendtoai.licenseCache');
+  const now = Date.now();
+
+  // Use cache if fresh and same key
+  if (!force && cache && cache.key === key && (now - cache.checkedAt) < CACHE_TTL_MS) {
+    cachedProStatus = cache.valid;
+    return cache.valid;
+  }
+
+  const remote = await validateLicenseRemote(key);
+
+  if (remote === null) {
+    // Network error — never punish a key that was previously confirmed valid
+    if (cache && cache.key === key && cache.valid) {
+      const offlineMs = now - (cache.lastValidAt ?? cache.checkedAt);
+      cachedProStatus = true;
+      // Warn after 30 days offline but still allow; hard-block after 1 year
+      if (offlineMs > HARD_BLOCK_AFTER_MS) {
+        cachedProStatus = false;
+        return false;
+      }
+      if (offlineMs > WARN_AFTER_MS) {
+        const days = Math.floor(offlineMs / (24 * 60 * 60 * 1000));
+        vscode.window.showWarningMessage(
+          `SendToAI: License hasn't been verified in ${days} days. Connect to the internet to keep Pro access.`
+        );
+      }
+      return cachedProStatus;
+    }
+    // No prior valid confirmation — deny
+    cachedProStatus = false;
+    return false;
+  }
+
+  // Server responded — persist result; only update lastValidAt when confirmed valid
+  await context.globalState.update('sendtoai.licenseCache', {
+    key,
+    valid: remote,
+    checkedAt: now,
+    lastValidAt: remote ? now : (cache?.lastValidAt ?? 0),
+  } satisfies LicenseCache);
+
+  cachedProStatus = remote;
+  return remote;
+}
+
+export function activate(context: vscode.ExtensionContext) {
+  const panel = new SendToAIPanel(context.extensionUri);
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('sendtoai.clearLicenseKey', async () => {
-      await context.secrets.delete(LICENSE_SECRET_KEY);
-      vscode.window.showInformationMessage('SendToAI: License key cleared.');
+    vscode.window.registerWebviewViewProvider(SendToAIPanel.viewType, panel, {
+      webviewOptions: { retainContextWhenHidden: true },
     })
   );
 
-  // ── Context memory (project notes) ───────────────────────────────────────────
-  interface SavedContext { notes: string; savedAt: string; }
-  const ctxKey = (uri: vscode.Uri) => `sendtoai.ctx.${uri.fsPath}`;
+  // Validate license in background on startup
+  const key = getLicenseKey();
+  refreshLicense(key, context).then(valid => panel.sendProStatus(valid));
 
-  panel.onLoadContext(() => {
-    const folders = vscode.workspace.workspaceFolders;
-    const notes = folders?.length
-      ? (context.globalState.get<SavedContext>(ctxKey(folders[0].uri))?.notes ?? '')
-      : '';
-    panel.sendContextLoaded(notes);
+  const broadcastPro = () => panel.sendProStatus(cachedProStatus);
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(async e => {
+      if (e.affectsConfiguration('sendtoai.licenseKey')) {
+        const newKey = getLicenseKey();
+        const valid = await refreshLicense(newKey, context, true);
+        panel.sendProStatus(valid);
+      }
+    })
+  );
+
+  // ── Scan ──────────────────────────────────────────────────────────────────
+  panel.onScanRequest(async () => {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+    if (!root) { return; }
+    try {
+      const tree = await scanProjectTree(root);
+      panel.updateTree(tree);
+    } catch (e) {
+      vscode.window.showErrorMessage(`SendToAI: scan failed — ${e}`);
+    }
   });
 
-  panel.onSaveContext((notes: string) => {
-    const folders = vscode.workspace.workspaceFolders;
-    if (!folders?.length) { return; }
-    context.globalState.update(ctxKey(folders[0].uri), { notes, savedAt: new Date().toISOString() });
+  // ── Context (project notes) ───────────────────────────────────────────────
+  panel.onLoadContext(() => {
+    const notes = context.globalState.get<string>(workspaceKey('notes')) ?? '';
+    panel.sendContextLoaded(notes);
+    broadcastPro();
+  });
+
+  panel.onSaveContext(async (notes) => {
+    await context.globalState.update(workspaceKey('notes'), notes);
     panel.sendContextSaved();
   });
 
-  // ── Named presets ─────────────────────────────────────────────────────────────
+  // ── Presets ───────────────────────────────────────────────────────────────
+  const presetsKey = () => workspaceKey('presets');
+  const getPresets = () =>
+    context.globalState.get<{ name: string; paths: string[] }[]>(presetsKey()) ?? [];
+
   panel.onLoadPresets(() => {
-    const folders = vscode.workspace.workspaceFolders;
-    if (!folders?.length) { panel.sendPresetsLoaded([]); return; }
-    panel.sendPresetsLoaded(getPresets(context, folders[0].uri));
+    panel.sendPresetsLoaded(getPresets());
   });
 
-  panel.onSavePreset((name: string, paths: string[]) => {
-    const folders = vscode.workspace.workspaceFolders;
-    if (!folders?.length) { return; }
-    const presets = getPresets(context, folders[0].uri);
-    const existingIdx = presets.findIndex(p => p.name === name);
-    if (existingIdx >= 0) {
-      presets[existingIdx] = { name, paths };
-    } else {
-      if (presets.length >= 10) {
-        vscode.window.showWarningMessage('SendToAI: Maximum 10 presets per workspace.');
-        return;
-      }
-      presets.push({ name, paths });
-    }
-    savePresets(context, folders[0].uri, presets);
+  panel.onSavePreset(async (name, paths) => {
+    const presets = getPresets();
+    const idx = presets.findIndex(p => p.name === name);
+    if (idx >= 0) { presets[idx] = { name, paths }; } else { presets.push({ name, paths }); }
+    await context.globalState.update(presetsKey(), presets);
     panel.sendPresetsLoaded(presets);
   });
 
-  panel.onDeletePreset((name: string) => {
-    const folders = vscode.workspace.workspaceFolders;
-    if (!folders?.length) { return; }
-    const updated = getPresets(context, folders[0].uri).filter(p => p.name !== name);
-    savePresets(context, folders[0].uri, updated);
-    panel.sendPresetsLoaded(updated);
+  panel.onDeletePreset(async (name) => {
+    const presets = getPresets().filter(p => p.name !== name);
+    await context.globalState.update(presetsKey(), presets);
+    panel.sendPresetsLoaded(presets);
   });
 
-  // ── Scan request from panel (file-tree picker) ───────────────────────────────
-  panel.onScanRequest(async () => {
-    const folders = vscode.workspace.workspaceFolders;
-    if (!folders?.length) { return; }
-    try {
-      const tree = await scanProjectTree(folders[0].uri);
-      panel.updateTree(tree);
-    } catch (e: unknown) {
-      vscode.window.showErrorMessage(
-        `SendToAI: Scan failed — ${e instanceof Error ? e.message : String(e)}`
-      );
-    }
-  });
-
-  // ── Panel bundle request (from sidebar UI) ───────────────────────────────────
-  panel.onBundleRequest((req: PanelRequest) => {
-    const folders = vscode.workspace.workspaceFolders;
-    if (!folders?.length) {
-      vscode.window.showErrorMessage('SendToAI: No workspace folder is open.');
+  // ── Bundle ────────────────────────────────────────────────────────────────
+  panel.onBundleRequest(async (req: PanelRequest) => {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+    if (!root) {
+      vscode.window.showErrorMessage('SendToAI: No workspace folder open.');
       return;
     }
-    runBundle(folders[0].uri, panel, statusBar, req, context);
-  });
 
-  // ── Bundle workspace (keyboard shortcut / command palette) ───────────────────
-  context.subscriptions.push(
-    vscode.commands.registerCommand('sendtoai.bundle', async () => {
-      const folders = vscode.workspace.workspaceFolders;
-      if (!folders?.length) {
-        vscode.window.showErrorMessage('SendToAI: No workspace folder is open.');
-        return;
-      }
-      await runBundle(folders[0].uri, panel, statusBar, { mode: 'project', format: 'standard', prompt: '', includeContext: false }, context);
-    })
-  );
-
-  // ── Bundle folder (right-click in explorer) ──────────────────────────────────
-  context.subscriptions.push(
-    vscode.commands.registerCommand('sendtoai.bundleFolder', async (uri?: vscode.Uri) => {
-      if (!uri) {
-        vscode.window.showErrorMessage('SendToAI: No folder provided.');
-        return;
-      }
-      await runBundle(uri, panel, statusBar, { mode: 'project', format: 'standard', prompt: '', includeContext: false }, context);
-    })
-  );
-}
-
-export function deactivate(): void {}
-
-// ── Core bundling flow ────────────────────────────────────────────────────────
-
-async function runBundle(
-  rootUri: vscode.Uri,
-  panel: SendToAIPanel,
-  statusBar: vscode.StatusBarItem,
-  req: PanelRequest,
-  context: vscode.ExtensionContext,
-): Promise<void> {
-  statusBar.text = '$(loading~spin) Bundling…';
-  panel.setBusy(true);
-
-  // ── Freemium gate ─────────────────────────────────────────────────────────────
-  if (req.selectedPaths && req.selectedPaths.size > 50) {
-    const pro = await isProUser(context);
-    if (!pro) {
-      panel.setBusy(false);
-      statusBar.text = '$(file-zip) SendToAI';
+    const isPro = cachedProStatus;
+    if (req.mode === 'git' && !isPro) {
       panel.showUpgradePrompt();
       return;
     }
-  }
 
-  const modeLabel = req.mode === 'tabs' ? 'Open Tabs' : req.mode === 'git' ? 'Git Changes' : 'Project';
+    panel.setBusy(true);
+    try {
+      const result = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'SendToAI: bundling…', cancellable: true },
+        async (progress, token) => {
+          const contextBlock = req.includeContext
+            ? (context.globalState.get<string>(workspaceKey('notes')) ?? '')
+            : undefined;
 
-  await vscode.window.withProgress(
-    {
-      location: vscode.ProgressLocation.Notification,
-      title: `SendToAI — ${modeLabel}`,
-      cancellable: true,
-    },
-    async (progress, token) => {
-      progress.report({ increment: 0, message: 'Scanning…' });
+          const res = await buildBundle(
+            root, progress, token,
+            req.mode, req.format, req.prompt,
+            req.selectedPaths, contextBlock, req.targetWindow,
+          );
 
+          if (!isPro && res.fileCount > PRO_FILE_LIMIT) {
+            panel.showUpgradePrompt();
+            return null;
+          }
+          return res;
+        }
+      );
+
+      if (!result) { return; }
+
+      await vscode.env.clipboard.writeText(result.bundle);
+      panel.updateStats(result, estimateCost(result.tokenEstimate));
+      vscode.window.showInformationMessage(
+        `\u2705 Copied! ${result.fileCount} files \u00b7 ~${result.tokenEstimate.toLocaleString()} tokens`
+      );
+
+      if (vscode.workspace.getConfiguration('sendtoai').get<boolean>('autoOpenAI')) {
+        vscode.env.openExternal(vscode.Uri.parse('https://claude.ai'));
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg !== 'Cancelled') { vscode.window.showErrorMessage(`SendToAI: ${msg}`); }
+    } finally {
+      panel.setBusy(false);
+    }
+  });
+
+  // ── Commands ──────────────────────────────────────────────────────────────
+  context.subscriptions.push(
+    vscode.commands.registerCommand('sendtoai.sendToAI', () => {
+      vscode.commands.executeCommand('sendtoai.panel.focus');
+    }),
+    vscode.commands.registerCommand('sendtoai.bundleProject', () => {
+      vscode.commands.executeCommand('sendtoai.panel.focus');
+    }),
+    vscode.commands.registerCommand('sendtoai.upgradeToPro', () => {
+      vscode.env.openExternal(vscode.Uri.parse('https://sendtoai.lemonsqueezy.com/checkout'));
+    }),
+    vscode.commands.registerCommand('sendtoai.enterLicenseKey', async () => {
+      const inputKey = await vscode.window.showInputBox({
+        prompt: 'Enter your SendToAI Pro license key',
+        placeHolder: 'SNDAI-XXXX-XXXX-XXXX-XXXX',
+        ignoreFocusOut: true,
+      });
+      if (!inputKey) { return; }
+
+      if (!LICENSE_RE.test(inputKey)) {
+        vscode.window.showErrorMessage('SendToAI: Invalid license key format.');
+        return;
+      }
+
+      // Validate with Lemon Squeezy before saving
+      const validating = vscode.window.setStatusBarMessage('SendToAI: Validating license…');
       try {
-        const contextBlock = (req.includeContext && req.notes) ? req.notes : undefined;
-        const result = await buildBundle(rootUri, progress, token, req.mode, req.format, req.prompt, req.selectedPaths, contextBlock);
-        if (token.isCancellationRequested) { return; }
+        const remote = await validateLicenseRemote(inputKey);
+        validating.dispose();
 
-        progress.report({ increment: 95, message: 'Copying to clipboard…' });
-        await vscode.env.clipboard.writeText(result.bundle);
-
-        const cost = estimateCost(result.tokenEstimate);
-        panel.updateStats(result, cost);
-        panel.setBusy(false);
-
-        const tk = result.tokenEstimate >= 1000
-          ? `~${(result.tokenEstimate / 1000).toFixed(1)}k`
-          : `~${result.tokenEstimate}`;
-
-        statusBar.text = `$(file-zip) ${tk} tokens`;
-        statusBar.tooltip = `SendToAI: Last bundle — ${result.fileCount} files, ${tk} tokens (${cost.haiku} Haiku)`;
-
-        if (result.tokenEstimate > 180_000) {
+        if (remote === false) {
+          vscode.window.showErrorMessage('SendToAI: License key is invalid or expired.');
+          return;
+        }
+        if (remote === null) {
           vscode.window.showWarningMessage(
-            `⚠️ Large bundle (${tk} tokens) — consider Sonnet 4.6 or Opus which support 1M context`
+            'SendToAI: Could not reach validation server. License saved — will verify when online.'
           );
         }
 
-        vscode.window.showInformationMessage(
-          `✅ ${result.fileCount} files bundled — ${tk} tokens — copied to clipboard`
+        await vscode.workspace.getConfiguration('sendtoai').update(
+          'licenseKey', inputKey, vscode.ConfigurationTarget.Global
         );
+        const valid = await refreshLicense(inputKey, context, true);
+        panel.sendProStatus(valid);
 
-        progress.report({ increment: 100 });
-      } catch (e: unknown) {
-        panel.setBusy(false);
-        statusBar.text = '$(file-zip) SendToAI';
-        if (e instanceof Error && e.message === 'Cancelled') { return; }
-        vscode.window.showErrorMessage(
-          `SendToAI: ${e instanceof Error ? e.message : String(e)}`
-        );
+        if (remote !== null) {
+          vscode.window.showInformationMessage('\uD83C\uDF89 License activated! PRO features enabled.');
+        }
+      } catch {
+        validating.dispose();
+        vscode.window.showErrorMessage('SendToAI: Validation failed. Please try again.');
       }
-    }
+    }),
   );
 }
+
+export function deactivate() {}

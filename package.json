@@ -1,89 +1,147 @@
 {
-  "name": "sendtoai",
-  "displayName": "SendToAI — Bundle Project to AI",
-  "description": "Bundle your entire project into one paste for Claude, ChatGPT, or any AI. Bypasses the 20-file limit.",
-  "version": "3.0.1",
-  "publisher": "OxainZ",
-  "homepage": "https://github.com/OxainZ/sendtoai-vscode",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/OxainZ/sendtoai-vscode.git"
-  },
-  "icon": "resources/icon.png",
-  "engines": {
-    "vscode": "^1.85.0"
-  },
-  "categories": ["AI", "Other"],
-  "keywords": ["AI", "Claude", "ChatGPT", "clipboard", "bundle", "project", "context"],
-  "activationEvents": [],
-  "main": "./out/extension.js",
-  "contributes": {
-    "commands": [
-      {
-        "command": "sendtoai.bundle",
-        "title": "SendToAI: Bundle Project to Clipboard"
-      },
-      {
-        "command": "sendtoai.bundleFolder",
-        "title": "SendToAI: Bundle This Folder"
-      },
-      {
-        "command": "sendtoai.enterLicenseKey",
-        "title": "SendToAI: Enter License Key"
-      },
-      {
-        "command": "sendtoai.clearLicenseKey",
-        "title": "SendToAI: Clear License Key"
-      }
+    "name": "sendtoai",
+    "displayName": "Send to AI - Smart Code Assistant (FREE + Pro $9)",
+    "description": "🚀 Bundle entire projects for AI analysis. FREE: Basic bundling (50 files) | PRO: Unlimited files + advanced features ($9 lifetime). Save $111/year vs GitHub Copilot monthly subscription.",
+    "version": "3.7.1",
+    "publisher": "oxainz",
+    "engines": {
+        "vscode": "^1.74.0"
+    },
+    "categories": [
+        "Machine Learning",
+        "Other",
+        "Snippets",
+        "Formatters"
     ],
-    "menus": {
-      "explorer/context": [
-        {
-          "command": "sendtoai.bundleFolder",
-          "when": "explorerResourceIsFolder",
-          "group": "sendtoai@1"
-        }
-      ]
-    },
-    "keybindings": [
-      {
-        "command": "sendtoai.bundle",
-        "key": "ctrl+shift+a",
-        "mac": "cmd+shift+a",
-        "when": "editorTextFocus || !inputFocus"
-      }
+    "keywords": [
+        "ai",
+        "chatgpt",
+        "claude",
+        "copilot alternative",
+        "github copilot",
+        "code analysis",
+        "project bundler",
+        "token estimation",
+        "smart prompting",
+        "developer tools",
+        "lifetime license",
+        "one time payment",
+        "save money",
+        "cheaper than copilot",
+        "ai assistant"
     ],
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "sendtoai-sidebar",
-          "title": "SendToAI",
-          "icon": "resources/icon.svg"
-        }
-      ]
+    "activationEvents": [
+        "onView:sendtoai.panel"
+    ],
+    "main": "./out/extension.js",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/oxainz/sendtoai-vscode"
     },
-    "views": {
-      "sendtoai-sidebar": [
-        {
-          "type": "webview",
-          "id": "sendtoai.panel",
-          "name": "SendToAI"
-        }
-      ]
+    "bugs": {
+        "url": "https://github.com/oxainz/sendtoai-vscode/issues"
     },
-    "configuration": {
-      "title": "SendToAI",
-      "properties": {}
-    }
-  },
-  "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
-  },
-  "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@types/vscode": "^1.85.0",
-    "typescript": "^5.3.0"
-  }
+    "homepage": "https://sendtoai.dev",
+    "contributes": {
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "sendtoai",
+                    "title": "SendToAI",
+                    "icon": "resources/icon.svg"
+                }
+            ]
+        },
+        "views": {
+            "sendtoai": [
+                {
+                    "type": "webview",
+                    "id": "sendtoai.panel",
+                    "name": "Send to AI"
+                }
+            ]
+        },
+        "commands": [
+            {
+                "command": "sendtoai.sendToAI",
+                "title": "📋 Send to AI",
+                "category": "Send to AI"
+            },
+            {
+                "command": "sendtoai.bundleProject",
+                "title": "🚀 Bundle Project for AI",
+                "category": "Send to AI"
+            },
+            {
+                "command": "sendtoai.upgradeToPro",
+                "title": "💎 Upgrade to Pro ($9 lifetime)",
+                "category": "Send to AI"
+            },
+            {
+                "command": "sendtoai.enterLicenseKey",
+                "title": "🔑 Enter License Key",
+                "category": "Send to AI"
+            }
+        ],
+        "keybindings": [
+            {
+                "command": "sendtoai.sendToAI",
+                "key": "ctrl+alt+a",
+                "mac": "cmd+alt+a",
+                "when": "editorTextFocus"
+            },
+            {
+                "command": "sendtoai.bundleProject",
+                "key": "ctrl+alt+b",
+                "mac": "cmd+alt+b"
+            }
+        ],
+        "menus": {
+            "editor/context": [
+                {
+                    "command": "sendtoai.sendToAI",
+                    "group": "sendtoai",
+                    "when": "editorTextFocus"
+                },
+                {
+                    "command": "sendtoai.bundleProject",
+                    "group": "sendtoai"
+                }
+            ],
+            "explorer/context": [
+                {
+                    "command": "sendtoai.bundleProject",
+                    "group": "sendtoai"
+                }
+            ]
+        },
+        "configuration": {
+            "title": "Send to AI",
+            "properties": {
+                "sendtoai.licenseKey": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Pro license key (purchase at https://sendtoai.dev for $9 lifetime)",
+                    "pattern": "^(SNDAI-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4})?$"
+                },
+                "sendtoai.autoOpenAI": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Automatically open AI chat interface after copying content"
+                }
+            }
+        }
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./"
+    },
+    "devDependencies": {
+        "@types/node": "16.x",
+        "@types/vscode": "^1.74.0",
+        "typescript": "^4.9.4",
+        "@vscode/vsce": "^3.9.1"
+    },
+    "dependencies": {}
 }
