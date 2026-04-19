@@ -11,7 +11,7 @@ const WARN_AFTER_MS       = 30 * 24 * 60 * 60 * 1000;
 const HARD_BLOCK_AFTER_MS = 365 * 24 * 60 * 60 * 1000;
 const SECRETS_KEY         = 'sendtoai.activation';
 
-const LICENSE_RE = /^([A-Z0-9]{8}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{12}|SNDAI-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4})$/i;
+const LICENSE_RE = /^[A-Z0-9]{8}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{12}$/i;
 
 interface LicenseCache {
   key: string;

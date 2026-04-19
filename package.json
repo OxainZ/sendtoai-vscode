@@ -2,7 +2,7 @@
     "name": "sendtoai",
     "displayName": "Send to AI - Smart Code Assistant (FREE + Pro $9)",
     "description": "🚀 Bundle entire projects for AI analysis. FREE: Basic bundling (50 files) | PRO: Unlimited files + advanced features ($9 lifetime). Save $111/year vs GitHub Copilot monthly subscription.",
-    "version": "3.7.3",
+    "version": "3.7.4",
     "publisher": "oxainz",
     "engines": {
         "vscode": "^1.74.0"
@@ -127,7 +127,7 @@
                     "type": "string",
                     "default": "",
                     "description": "Pro license key (purchase at https://sendtoai.dev for $9 lifetime)",
-                    "pattern": "^([A-Z0-9]{8}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{12}|SNDAI-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4})?$"
+                    "pattern": "^([A-Z0-9]{8}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{12})?$"
                 },
                 "sendtoai.autoOpenAI": {
                     "type": "boolean",
