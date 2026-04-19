@@ -6,17 +6,111 @@ import { estimateCost } from './costEstimator';
 
 const PRO_FILE_LIMIT = 50;
 const PRODUCT_ID = 926714;
-const CACHE_TTL_MS        = 24 * 60 * 60 * 1000;         // 24 h  — re-validate when online
-const WARN_AFTER_MS       = 30 * 24 * 60 * 60 * 1000;    // 30 d  — start nudging user
-const HARD_BLOCK_AFTER_MS = 365 * 24 * 60 * 60 * 1000;   // 1 yr  — absolute offline limit
+const CACHE_TTL_MS        = 24 * 60 * 60 * 1000;
+const WARN_AFTER_MS       = 30 * 24 * 60 * 60 * 1000;
+const HARD_BLOCK_AFTER_MS = 365 * 24 * 60 * 60 * 1000;
+const SECRETS_KEY         = 'sendtoai.activation';
 
 const LICENSE_RE = /^SNDAI-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
 
 interface LicenseCache {
   key: string;
   valid: boolean;
-  checkedAt: number;    // last time we attempted a remote check
-  lastValidAt: number;  // last time remote confirmed valid === true
+  checkedAt: number;
+  lastValidAt: number;
+}
+
+interface StoredActivation {
+  instanceId: string;
+  activatedAt: number;
+}
+
+// ── HTTP helper ───────────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function lsPost(path: string, body: object): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const bodyStr = JSON.stringify(body);
+    const req = https.request({
+      hostname: 'api.lemonsqueezy.com',
+      path,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Content-Length': Buffer.byteLength(bodyStr),
+      },
+    }, (res: import('http').IncomingMessage) => {
+      let data = '';
+      res.on('data', (chunk: Buffer) => { data += chunk; });
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); }
+        catch { reject(new Error('Invalid JSON')); }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(8000, () => { req.destroy(); reject(new Error('Timeout')); });
+    req.write(bodyStr);
+    req.end();
+  });
+}
+
+// ── License API ───────────────────────────────────────────────────────────────
+
+type ActivateResult =
+  | { ok: true;  instanceId: string }
+  | { ok: false; limitReached: boolean };
+
+async function activateLicense(key: string, context: vscode.ExtensionContext): Promise<ActivateResult | null> {
+  try {
+    const instanceName = `vscode-${vscode.env.machineId.slice(0, 16)}`;
+    const json = await lsPost('/v1/licenses/activate', { license_key: key, instance_name: instanceName });
+
+    if (json.activated !== true || json.meta?.product_id !== PRODUCT_ID) {
+      const limitReached = typeof json.error === 'string' && json.error.toLowerCase().includes('activation limit');
+      return { ok: false, limitReached };
+    }
+
+    const activation: StoredActivation = { instanceId: json.instance.id, activatedAt: Date.now() };
+    await context.secrets.store(SECRETS_KEY, JSON.stringify(activation));
+    return { ok: true, instanceId: json.instance.id };
+  } catch {
+    return null; // network error
+  }
+}
+
+// Returns true=valid, false=invalid/limit, null=network error
+async function checkLicenseRemote(key: string, context: vscode.ExtensionContext): Promise<boolean | null> {
+  const storedStr = await context.secrets.get(SECRETS_KEY);
+
+  if (!storedStr) {
+    // No stored activation — activate this machine
+    const result = await activateLicense(key, context);
+    if (result === null) { return null; }
+    return result.ok;
+  }
+
+  try {
+    const stored: StoredActivation = JSON.parse(storedStr);
+    const json = await lsPost('/v1/licenses/validate', {
+      license_key: key,
+      instance_id: stored.instanceId,
+    });
+
+    if (json.valid !== true || json.meta?.product_id !== PRODUCT_ID) {
+      // Instance no longer exists (secrets from old install, etc.) — re-activate
+      if (typeof json.error === 'string' && json.error.toLowerCase().includes('instance')) {
+        await context.secrets.delete(SECRETS_KEY);
+        const result = await activateLicense(key, context);
+        if (result === null) { return null; }
+        return result.ok;
+      }
+      return false;
+    }
+    return true;
+  } catch {
+    return null; // network error
+  }
 }
 
 let cachedProStatus = false;
@@ -28,41 +122,6 @@ function getLicenseKey(): string {
 function workspaceKey(suffix: string): string {
   const root = (vscode.workspace.workspaceFolders?.[0]?.uri?.fsPath ?? 'global').replace(/\\/g, '/');
   return `sendtoai.${root}.${suffix}`;
-}
-
-// Returns true=valid, false=invalid, null=network error
-function validateLicenseRemote(key: string): Promise<boolean | null> {
-  return new Promise(resolve => {
-    const body = JSON.stringify({ license_key: key, instance_name: 'vscode-sendtoai' });
-    const options = {
-      hostname: 'api.lemonsqueezy.com',
-      path: '/v1/licenses/validate',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Content-Length': Buffer.byteLength(body),
-      },
-    };
-    const req = https.request(options, (res: import('http').IncomingMessage) => {
-      let data = '';
-      res.on('data', (chunk: Buffer) => { data += chunk; });
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          const valid = json.valid === true &&
-            json.meta?.product_id === PRODUCT_ID;
-          resolve(valid);
-        } catch {
-          resolve(null);
-        }
-      });
-    });
-    req.on('error', () => resolve(null));
-    req.setTimeout(8000, () => { req.destroy(); resolve(null); });
-    req.write(body);
-    req.end();
-  });
 }
 
 async function refreshLicense(
@@ -78,20 +137,17 @@ async function refreshLicense(
   const cache = context.globalState.get<LicenseCache>('sendtoai.licenseCache');
   const now = Date.now();
 
-  // Use cache if fresh and same key
   if (!force && cache && cache.key === key && (now - cache.checkedAt) < CACHE_TTL_MS) {
     cachedProStatus = cache.valid;
     return cache.valid;
   }
 
-  const remote = await validateLicenseRemote(key);
+  const remote = await checkLicenseRemote(key, context);
 
   if (remote === null) {
-    // Network error — never punish a key that was previously confirmed valid
+    // Network error — keep Pro if previously confirmed valid
     if (cache && cache.key === key && cache.valid) {
       const offlineMs = now - (cache.lastValidAt ?? cache.checkedAt);
-      cachedProStatus = true;
-      // Warn after 30 days offline but still allow; hard-block after 1 year
       if (offlineMs > HARD_BLOCK_AFTER_MS) {
         cachedProStatus = false;
         return false;
@@ -102,14 +158,13 @@ async function refreshLicense(
           `SendToAI: License hasn't been verified in ${days} days. Connect to the internet to keep Pro access.`
         );
       }
-      return cachedProStatus;
+      cachedProStatus = true;
+      return true;
     }
-    // No prior valid confirmation — deny
     cachedProStatus = false;
     return false;
   }
 
-  // Server responded — persist result; only update lastValidAt when confirmed valid
   await context.globalState.update('sendtoai.licenseCache', {
     key,
     valid: remote,
@@ -121,6 +176,8 @@ async function refreshLicense(
   return remote;
 }
 
+// ── Extension entry point ─────────────────────────────────────────────────────
+
 export function activate(context: vscode.ExtensionContext) {
   const panel = new SendToAIPanel(context.extensionUri);
 
@@ -131,16 +188,14 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   // Validate license in background on startup
-  const key = getLicenseKey();
-  refreshLicense(key, context).then(valid => panel.sendProStatus(valid));
+  refreshLicense(getLicenseKey(), context).then(valid => panel.sendProStatus(valid));
 
   const broadcastPro = () => panel.sendProStatus(cachedProStatus);
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(async e => {
       if (e.affectsConfiguration('sendtoai.licenseKey')) {
-        const newKey = getLicenseKey();
-        const valid = await refreshLicense(newKey, context, true);
+        const valid = await refreshLicense(getLicenseKey(), context, true);
         panel.sendProStatus(valid);
       }
     })
@@ -260,6 +315,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('sendtoai.upgradeToPro', () => {
       vscode.env.openExternal(vscode.Uri.parse('https://sendtoai.lemonsqueezy.com/checkout'));
     }),
+
     vscode.commands.registerCommand('sendtoai.enterLicenseKey', async () => {
       const inputKey = await vscode.window.showInputBox({
         prompt: 'Enter your SendToAI Pro license key',
@@ -273,20 +329,27 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      // Validate with Lemon Squeezy before saving
-      const validating = vscode.window.setStatusBarMessage('SendToAI: Validating license…');
+      const validating = vscode.window.setStatusBarMessage('SendToAI: Activating license…');
       try {
-        const remote = await validateLicenseRemote(inputKey);
+        // Clear any existing activation so we register this machine fresh
+        await context.secrets.delete(SECRETS_KEY);
+        const result = await activateLicense(inputKey, context);
         validating.dispose();
 
-        if (remote === false) {
-          vscode.window.showErrorMessage('SendToAI: License key is invalid or expired.');
-          return;
-        }
-        if (remote === null) {
+        if (result === null) {
           vscode.window.showWarningMessage(
-            'SendToAI: Could not reach validation server. License saved — will verify when online.'
+            'SendToAI: Could not reach activation server. License saved — will activate when online.'
           );
+        } else if (!result.ok) {
+          if (result.limitReached) {
+            vscode.window.showErrorMessage(
+              'SendToAI: This license is already active on 5 machines. ' +
+              'Run "Deactivate License on This Machine" on another machine first.'
+            );
+          } else {
+            vscode.window.showErrorMessage('SendToAI: License key is invalid or expired.');
+          }
+          return;
         }
 
         await vscode.workspace.getConfiguration('sendtoai').update(
@@ -295,12 +358,62 @@ export function activate(context: vscode.ExtensionContext) {
         const valid = await refreshLicense(inputKey, context, true);
         panel.sendProStatus(valid);
 
-        if (remote !== null) {
+        if (result !== null) {
           vscode.window.showInformationMessage('\uD83C\uDF89 License activated! PRO features enabled.');
         }
       } catch {
         validating.dispose();
-        vscode.window.showErrorMessage('SendToAI: Validation failed. Please try again.');
+        vscode.window.showErrorMessage('SendToAI: Activation failed. Please try again.');
+      }
+    }),
+
+    vscode.commands.registerCommand('sendtoai.deactivateLicense', async () => {
+      const key = getLicenseKey();
+      if (!LICENSE_RE.test(key)) {
+        vscode.window.showInformationMessage('SendToAI: No Pro license configured on this machine.');
+        return;
+      }
+
+      const confirm = await vscode.window.showWarningMessage(
+        'Deactivate SendToAI Pro on this machine? This frees up one of your 5 activation slots.',
+        { modal: true },
+        'Deactivate',
+      );
+      if (confirm !== 'Deactivate') { return; }
+
+      const storedStr = await context.secrets.get(SECRETS_KEY);
+      if (!storedStr) {
+        // No instance_id stored — clear local state anyway
+        await context.globalState.update('sendtoai.licenseCache', undefined);
+        cachedProStatus = false;
+        panel.sendProStatus(false);
+        vscode.window.showInformationMessage('SendToAI: Local license cleared.');
+        return;
+      }
+
+      const deactivating = vscode.window.setStatusBarMessage('SendToAI: Deactivating…');
+      try {
+        const stored: StoredActivation = JSON.parse(storedStr);
+        const json = await lsPost('/v1/licenses/deactivate', {
+          license_key: key,
+          instance_id: stored.instanceId,
+        });
+        deactivating.dispose();
+
+        if (json.deactivated === true) {
+          await context.secrets.delete(SECRETS_KEY);
+          await context.globalState.update('sendtoai.licenseCache', undefined);
+          cachedProStatus = false;
+          panel.sendProStatus(false);
+          vscode.window.showInformationMessage(
+            'SendToAI: License deactivated on this machine. You can now activate it elsewhere.'
+          );
+        } else {
+          vscode.window.showErrorMessage('SendToAI: Deactivation failed. Contact support@sendtoai.dev.');
+        }
+      } catch {
+        deactivating.dispose();
+        vscode.window.showErrorMessage('SendToAI: Could not reach server. Try again when online.');
       }
     }),
   );
