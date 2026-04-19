@@ -101,7 +101,7 @@ Access settings via `File > Preferences > Settings` and search for "Send to AI":
 
 ```json
 {
-    "sendtoai.licenseKey": "SNDAI-XXXX-XXXX-XXXX-XXXX",
+    "sendtoai.licenseKey": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
     "sendtoai.autoOpenAI": false
 }
 ```
