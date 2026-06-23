@@ -145,8 +145,10 @@
     "devDependencies": {
         "@types/node": "16.x",
         "@types/vscode": "^1.74.0",
-        "typescript": "^4.9.4",
-        "@vscode/vsce": "^3.9.1"
+        "@vscode/vsce": "^3.9.1",
+        "typescript": "^4.9.4"
     },
-    "dependencies": {}
+    "overrides": {
+        "undici": ">=7.28.0"
+    }
 }
