@@ -386,6 +386,36 @@ function scoreRelevance(rel: string, content: string, terms: string[]): number {
   return score;
 }
 
+// ── Smart selection: dependency-graph awareness ──────────────────────────────
+// Editor-native edge the web bundlers can't match: follow a file's imports so
+// the files your task DEPENDS ON survive the fit-to-window cut alongside it —
+// complete, connected context instead of orphaned snippets.
+
+function extractImports(content: string, ext: string): string[] {
+  const specs: string[] = [];
+  if (['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'].includes(ext)) {
+    const re = /(?:from\s*['"]([^'"]+)['"])|(?:require\(\s*['"]([^'"]+)['"]\s*\))|(?:import\(\s*['"]([^'"]+)['"]\s*\))/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(content))) { specs.push(m[1] || m[2] || m[3]); }
+  } else if (ext === '.py') {
+    const re = /^\s*from\s+(\.[\w.]*)\s+import|^\s*import\s+(\.[\w.]+)/gm;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(content))) { specs.push(m[1] || m[2]); }
+  }
+  // local/relative specifiers only — third-party packages aren't in the bundle
+  return specs.filter(s => s && s.startsWith('.'));
+}
+
+// Resolve a relative import specifier to an actual file in the bundle set.
+function resolveImport(fromRel: string, spec: string, known: Set<string>): string | null {
+  const dir = path.posix.dirname(fromRel);
+  const target = path.posix.normalize(path.posix.join(dir, spec.replace(/\\/g, '/')));
+  const exts = ['', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py'];
+  for (const e of exts) { if (known.has(target + e)) { return target + e; } }
+  for (const e of exts.filter(Boolean)) { if (known.has(`${target}/index${e}`)) { return `${target}/index${e}`; } }
+  return null;
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export interface BundleResult {
@@ -652,8 +682,25 @@ export async function buildBundle(
       // So "fit to window" keeps what matters for what you're doing. With no
       // prompt it falls back to structural relevance (entry points, source, docs).
       const terms = extractQueryTerms(userPrompt);
+      // 1) base relevance per file
+      const baseScore = new Map<string, number>(
+        withTok.map(f => [f.rel, scoreRelevance(f.rel, f.content, terms)] as const)
+      );
+      // 2) dependency-graph boost: a file imported by a relevant file inherits
+      //    part of that relevance, so the dependencies of what you're working on
+      //    survive the cut too (complete, connected context).
+      const known = new Set(withTok.map(f => f.rel));
+      const finalScore = new Map(baseScore);
+      for (const f of withTok) {
+        const impScore = baseScore.get(f.rel) ?? 0;
+        if (impScore <= 0) { continue; }
+        for (const spec of extractImports(f.content, path.extname(f.rel).toLowerCase())) {
+          const dep = resolveImport(f.rel, spec, known);
+          if (dep) { finalScore.set(dep, (finalScore.get(dep) ?? 0) + Math.min(impScore, 12) * 0.5); }
+        }
+      }
       const scored = withTok
-        .map(f => ({ ...f, score: scoreRelevance(f.rel, f.content, terms) }))
+        .map(f => ({ ...f, score: finalScore.get(f.rel) ?? 0 }))
         .sort((a, b) => (b.score - a.score) || (a.est - b.est)); // most relevant; tie → smaller first to pack more
 
       const kept: Array<{ rel: string; content: string; est: number; score: number }> = [];
