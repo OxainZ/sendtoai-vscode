@@ -330,6 +330,62 @@ function compactSource(text: string, ext: string): string {
     .replace(/\n{3,}/g, '\n\n');
 }
 
+// ── Smart selection: relevance scoring ───────────────────────────────────────
+// When a bundle must be trimmed to fit a token budget, rank files by how
+// relevant they are to the user's task instead of blindly cutting the largest.
+// This is the differentiator vs dumb glob/size-based bundlers: keep what matters
+// for what you're actually doing.
+
+const SOURCE_EXTS = new Set([
+  '.py', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+  '.java', '.go', '.rs', '.rb', '.php', '.cs', '.cpp', '.c', '.h', '.swift', '.kt',
+  '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf',
+  '.sql', '.graphql', '.proto',
+  '.html', '.htm', '.css', '.scss', '.sass', '.less',
+  '.sh', '.bash', '.zsh', '.ps1',
+]);
+
+const QUERY_STOPWORDS = new Set([
+  'the', 'and', 'for', 'with', 'this', 'that', 'from', 'have', 'what', 'why',
+  'how', 'fix', 'bug', 'issue', 'error', 'errors', 'code', 'file', 'files', 'help',
+  'need', 'want', 'make', 'add', 'please', 'can', 'you', 'your', 'its', 'is', 'are',
+  'was', 'were', 'the', 'to', 'in', 'of', 'on', 'at', 'it', 'an', 'my', 'me', 'do',
+  'does', 'not', 'but', 'or', 'if', 'so', 'get', 'set', 'use', 'using', 'where',
+  'when', 'which', 'about', 'into', 'out', 'all', 'function', 'class', 'const',
+]);
+
+function extractQueryTerms(prompt: string): string[] {
+  if (!prompt) { return []; }
+  const raw = prompt.toLowerCase().match(/[a-z_][a-z0-9_]{2,}/g) ?? [];
+  return [...new Set(raw)].filter(t => !QUERY_STOPWORDS.has(t)).slice(0, 40);
+}
+
+// Higher = more relevant. Task-query overlap (filename/path/content mentions)
+// plus structural priors (entry points, docs, config kept; tests/generated demoted).
+function scoreRelevance(rel: string, content: string, terms: string[]): number {
+  const lowerRel = rel.toLowerCase();
+  const base = path.basename(lowerRel);
+  const ext = path.extname(lowerRel);
+  let score = 0;
+
+  if (SOURCE_EXTS.has(ext)) { score += 5; }
+  if (/(^|\/)(index|main|app|__init__|mod|lib)\.[a-z]+$/.test(lowerRel)) { score += 6; }
+  if (/readme|architecture|design|contributing/.test(base)) { score += 4; }
+  if (/(package\.json|pyproject\.toml|cargo\.toml|go\.mod|tsconfig\.json|requirements\.txt|dockerfile)$/.test(base)) { score += 3; }
+  if (/(test|spec|\.min\.|generated|mock|fixture|snapshot|\.lock)/.test(lowerRel)) { score -= 4; }
+
+  if (terms.length) {
+    const lc = content.toLowerCase();
+    for (const t of terms) {
+      if (base.includes(t)) { score += 12; }          // filename matches the task — strongest signal
+      else if (lowerRel.includes(t)) { score += 8; }   // path/dir matches
+      const occ = lc.split(t).length - 1;              // content mentions (capped so one huge file can't dominate)
+      if (occ) { score += Math.min(occ, 5) * 2; }
+    }
+  }
+  return score;
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export interface BundleResult {
@@ -590,36 +646,30 @@ export async function buildBundle(
     let total = withTok.reduce((s, f) => s + f.est, 0) + FIXED_OVERHEAD;
 
     if (total > tokenLimit) {
-      // Source-code extensions — always kept until last resort
-      const SOURCE_EXTS = new Set([
-        '.py', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
-        '.java', '.go', '.rs', '.rb', '.php', '.cs', '.cpp', '.c', '.h', '.swift', '.kt',
-        '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf',
-        '.sql', '.graphql', '.proto',
-        '.html', '.htm', '.css', '.scss', '.sass', '.less',
-        '.sh', '.bash', '.zsh', '.ps1',
-      ]);
-      // Sort: non-source first (isSource=0 < 1), then largest-first within each group.
-      // shift() removes from the front, so non-source large files get cut before source files.
-      withTok.sort((a, b) => {
-        const aS = SOURCE_EXTS.has(path.extname(a.rel).toLowerCase()) ? 1 : 0;
-        const bS = SOURCE_EXTS.has(path.extname(b.rel).toLowerCase()) ? 1 : 0;
-        if (aS !== bS) { return aS - bS; } // non-source first
-        return b.est - a.est;              // largest first within group
-      });
-      while (total > tokenLimit && withTok.length > 0) {
-        const removed = withTok.shift()!;
-        total -= removed.est;
-        ignoredCount++;
+      // SMART SELECTION (the differentiator): rank every file by relevance to
+      // the user's task/prompt + structure, then greedily KEEP the most-relevant
+      // files that fit the budget — instead of blindly cutting the largest ones.
+      // So "fit to window" keeps what matters for what you're doing. With no
+      // prompt it falls back to structural relevance (entry points, source, docs).
+      const terms = extractQueryTerms(userPrompt);
+      const scored = withTok
+        .map(f => ({ ...f, score: scoreRelevance(f.rel, f.content, terms) }))
+        .sort((a, b) => (b.score - a.score) || (a.est - b.est)); // most relevant; tie → smaller first to pack more
+
+      const kept: Array<{ rel: string; content: string; est: number; score: number }> = [];
+      let used = FIXED_OVERHEAD;
+      for (const f of scored) {
+        if (used + f.est <= tokenLimit) { kept.push(f); used += f.est; }
+        else { ignoredCount++; }
       }
-      if (withTok.length === 0) {
+      if (kept.length === 0) {
         throw new Error(
           `Token limit (${tokenLimit.toLocaleString()}) is smaller than the fixed bundle overhead. ` +
           `Increase the window size or select fewer files.`
         );
       }
-      withTok.sort((a, b) => a.rel.localeCompare(b.rel));
-      fileContents.splice(0, fileContents.length, ...withTok);
+      kept.sort((a, b) => a.rel.localeCompare(b.rel));
+      fileContents.splice(0, fileContents.length, ...kept.map(f => ({ rel: f.rel, content: f.content })));
 
       // Rebuild tree and update included list to reflect trimmed file set
       const keptRels = new Set(fileContents.map(f => f.rel));
