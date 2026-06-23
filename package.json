@@ -73,6 +73,16 @@
                 "category": "Send to AI"
             },
             {
+                "command": "sendtoai.bundleErrors",
+                "title": "🐛 Bundle Errors for AI",
+                "category": "Send to AI"
+            },
+            {
+                "command": "sendtoai.applyResponse",
+                "title": "📥 Apply AI Response (paste-back)",
+                "category": "Send to AI"
+            },
+            {
                 "command": "sendtoai.upgradeToPro",
                 "title": "💎 Upgrade to Pro ($9 lifetime)",
                 "category": "Send to AI"

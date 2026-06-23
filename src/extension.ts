@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as https from 'https';
+import * as path from 'path';
 import { SendToAIPanel, PanelRequest } from './panel';
 import { buildBundle, scanProjectTree } from './bundler';
 import { estimateCost } from './costEstimator';
@@ -176,6 +177,36 @@ async function refreshLicense(
   return remote;
 }
 
+// ── Round-trip: parse an AI chat reply into editable file blocks ──────────────
+// Recognizes a file path from the fence info string (```ts src/a.ts) or a line
+// just before the fence (**src/a.ts**, `src/a.ts`, File: src/a.ts, // src/a.ts).
+function extractPathToken(s: string): string {
+  const cleaned = s.replace(/[*`>#]/g, '').replace(/^\s*(?:file|path)\s*:/i, '').trim();
+  const m = cleaned.match(/([\w][\w./-]*\.[A-Za-z][A-Za-z0-9]{0,7})\b/);
+  return m ? m[1].replace(/\\/g, '/') : '';
+}
+
+function parseFileBlocks(text: string): { path: string; content: string }[] {
+  const out: { path: string; content: string }[] = [];
+  const lines = text.split(/\r?\n/);
+  let pending = '';
+  for (let i = 0; i < lines.length; i++) {
+    const fence = lines[i].match(/^\s*```(.*)$/);
+    if (fence) {
+      const p = extractPathToken(fence[1]) || pending;
+      i++;
+      const buf: string[] = [];
+      while (i < lines.length && !/^\s*```/.test(lines[i])) { buf.push(lines[i]); i++; }
+      if (p) { out.push({ path: p, content: buf.join('\n') }); }
+      pending = '';
+      continue;
+    }
+    const tok = extractPathToken(lines[i]);
+    if (tok) { pending = tok; }
+  }
+  return out;
+}
+
 // ── Extension entry point ─────────────────────────────────────────────────────
 
 export function activate(context: vscode.ExtensionContext) {
@@ -312,6 +343,98 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('sendtoai.bundleProject', () => {
       vscode.commands.executeCommand('sendtoai.panel.focus');
     }),
+
+    // ── #3 Error-driven bundling — uses VS Code's diagnostics (web bundlers can't) ──
+    vscode.commands.registerCommand('sendtoai.bundleErrors', async () => {
+      const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+      if (!root) { vscode.window.showErrorMessage('SendToAI: No workspace folder open.'); return; }
+      const rootPath = root.fsPath;
+      const errorFiles = new Set<string>();
+      const problemLines: string[] = [];
+      for (const [uri, diags] of vscode.languages.getDiagnostics()) {
+        if (uri.scheme !== 'file') { continue; }
+        const fp = uri.fsPath;
+        if (fp !== rootPath && !fp.startsWith(rootPath + path.sep)) { continue; }
+        const relevant = diags.filter(d =>
+          d.severity === vscode.DiagnosticSeverity.Error || d.severity === vscode.DiagnosticSeverity.Warning);
+        if (relevant.length === 0) { continue; }
+        const rel = path.relative(rootPath, fp).replace(/\\/g, '/');
+        errorFiles.add(rel);
+        for (const d of relevant) {
+          const sev = d.severity === vscode.DiagnosticSeverity.Error ? 'ERROR' : 'WARN';
+          problemLines.push(`${rel}:${d.range.start.line + 1}:${d.range.start.character + 1}  [${sev}] ${d.message}`);
+        }
+      }
+      if (errorFiles.size === 0) {
+        vscode.window.showInformationMessage('SendToAI: No errors or warnings in the Problems panel. 🎉');
+        return;
+      }
+      const contextBlock = `PROBLEMS REPORTED BY VS CODE (please fix):\n${problemLines.join('\n')}`;
+      const prompt = 'Fix the errors and warnings listed in the project context above. For each, explain the root cause and the fix briefly.';
+      panel.setBusy(true);
+      try {
+        const result = await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: 'SendToAI: bundling problem files…', cancellable: true },
+          (progress, token) => buildBundle(root, progress, token, 'project', 'standard', prompt, errorFiles, contextBlock, 0),
+        );
+        if (!result) { return; }
+        await vscode.env.clipboard.writeText(result.bundle);
+        vscode.window.showInformationMessage(
+          `✅ Copied! ${errorFiles.size} file(s) with problems + ${problemLines.length} diagnostics · ~${result.tokenEstimate.toLocaleString()} tokens. Paste into your AI.`);
+        if (vscode.workspace.getConfiguration('sendtoai').get<boolean>('autoOpenAI')) {
+          vscode.env.openExternal(vscode.Uri.parse('https://claude.ai'));
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg !== 'Cancelled') { vscode.window.showErrorMessage(`SendToAI: ${msg}`); }
+      } finally {
+        panel.setBusy(false);
+      }
+    }),
+
+    // ── #4 Round-trip — paste the AI's reply back, apply edits as reviewable changes ──
+    vscode.commands.registerCommand('sendtoai.applyResponse', async () => {
+      const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+      if (!root) { vscode.window.showErrorMessage('SendToAI: No workspace folder open.'); return; }
+      const clip = await vscode.env.clipboard.readText();
+      const blocks = parseFileBlocks(clip);
+      if (blocks.length === 0) {
+        vscode.window.showWarningMessage(
+          'SendToAI: No file code-blocks found on the clipboard. Copy the AI\'s reply (each code block preceded by its file path) and run this again.');
+        return;
+      }
+      const byPath = new Map<string, string>();
+      for (const b of blocks) { byPath.set(b.path, b.content); }
+      const items = await Promise.all([...byPath.entries()].map(async ([p, c]) => {
+        let exists = true;
+        try { await vscode.workspace.fs.stat(vscode.Uri.joinPath(root, p)); } catch { exists = false; }
+        return { label: p, description: `${c.split('\n').length} lines · ${exists ? 'modify' : 'new file'}`, picked: true, p, c };
+      }));
+      const picked = await vscode.window.showQuickPick(items, {
+        canPickMany: true,
+        title: `SendToAI: apply ${items.length} AI edit(s)?`,
+        placeHolder: 'Select files to write — undoable with Ctrl+Z and visible in git',
+      });
+      if (!picked || picked.length === 0) { return; }
+      const edit = new vscode.WorkspaceEdit();
+      for (const it of picked) {
+        const uri = vscode.Uri.joinPath(root, it.p);
+        let exists = true;
+        try { await vscode.workspace.fs.stat(uri); } catch { exists = false; }
+        if (!exists) {
+          edit.createFile(uri, { ignoreIfExists: true });
+          edit.insert(uri, new vscode.Position(0, 0), it.c);
+        } else {
+          const doc = await vscode.workspace.openTextDocument(uri);
+          edit.replace(uri, new vscode.Range(0, 0, doc.lineCount, 0), it.c);
+        }
+      }
+      const ok = await vscode.workspace.applyEdit(edit);
+      vscode.window.showInformationMessage(ok
+        ? `✅ Applied ${picked.length} file(s). Review in the editor or git diff · Ctrl+Z to undo.`
+        : 'SendToAI: Could not apply the edits.');
+    }),
+
     vscode.commands.registerCommand('sendtoai.upgradeToPro', () => {
       vscode.env.openExternal(vscode.Uri.parse('https://sendtoai.lemonsqueezy.com/checkout/buy/e8764352-b784-409e-8d59-c44fd9aad90c'));
     }),
