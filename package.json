@@ -159,6 +159,7 @@
         "typescript": "^4.9.4"
     },
     "overrides": {
-        "undici": ">=7.28.0"
+        "undici": ">=7.28.0",
+        "markdown-it": ">=14.1.0"
     }
 }
