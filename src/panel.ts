@@ -121,6 +121,12 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
         case 'enterLicenseKey':
           vscode.commands.executeCommand('sendtoai.enterLicenseKey');
           break;
+        case 'bundleErrors':
+          vscode.commands.executeCommand('sendtoai.bundleErrors');
+          break;
+        case 'applyResponse':
+          vscode.commands.executeCommand('sendtoai.applyResponse');
+          break;
       }
     });
   }
@@ -496,6 +502,12 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
   <span id="btnLabel">Bundle to Clipboard</span>
   <span id="shortcutHint" style="font-size:10px;font-weight:400;opacity:0.7">Ctrl+Alt+A</span>
 </button>
+
+<!-- Smart actions (editor-native — what web bundlers can't do) -->
+<div class="ai-row" style="margin-top:6px;">
+  <button class="btn-ai" style="background:#3a3a5a;" onclick="send('bundleErrors')" title="Bundle every file with an error/warning + the exact messages, ready to paste into your AI">🐛 Bundle Errors</button>
+  <button class="btn-ai" style="background:#3a5a3a;" onclick="send('applyResponse')" title="Paste the AI's reply, then apply its code edits straight to your files (undoable)">📥 Apply AI Reply</button>
+</div>
 
 <!-- AI Quick Open -->
 <div class="ai-row">
