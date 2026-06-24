@@ -2,22 +2,28 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "type": "npm",
-      "script": "compile",
+      "label": "compile",
+      "type": "process",
+      "command": "node",
+      "args": ["./node_modules/typescript/bin/tsc", "-p", "./"],
       "problemMatcher": "$tsc",
       "group": {
         "kind": "build",
         "isDefault": true
       },
-      "label": "npm: compile"
+      "presentation": {
+        "reveal": "silent",
+        "clear": true
+      }
     },
     {
-      "type": "npm",
-      "script": "watch",
+      "label": "watch",
+      "type": "process",
+      "command": "node",
+      "args": ["./node_modules/typescript/bin/tsc", "-watch", "-p", "./"],
       "problemMatcher": "$tsc-watch",
       "isBackground": true,
-      "group": "build",
-      "label": "npm: watch"
+      "group": "build"
     }
   ]
 }
