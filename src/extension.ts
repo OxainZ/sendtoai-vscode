@@ -400,7 +400,7 @@ export function activate(context: vscode.ExtensionContext) {
       const blocks = parseFileBlocks(clip);
       if (blocks.length === 0) {
         vscode.window.showWarningMessage(
-          'SendToAI: No file code-blocks found on the clipboard. Copy the AI\'s reply (each code block preceded by its file path) and run this again.');
+          'SendToAI: No file code-blocks found on the clipboard. Copy the AI\'s FULL reply — not just the chat\'s "copy code" button — so the file path and ``` fences are included, then run this again.');
         return;
       }
       const byPath = new Map<string, string>();

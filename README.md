@@ -17,6 +17,8 @@ No web tool that's free of an API key does this — because no web tool can see 
 ### 🐛 Bundle Errors — task-aware by construction
 One click bundles **only the files VS Code is reporting errors/warnings on**, with the exact diagnostics (`src/api.ts:42:7 [ERROR] Property 'id' does not exist…`) and a ready-to-paste *"please fix these"* prompt. Web bundlers can't read your Problems panel. This can.
 
+> It captures a **snapshot of the Problems panel** as it is right now. If the errors look stale or wrong, save the file or run *"Developer: Reload Window"* / *"Restart Language Server"* so the diagnostics refresh first.
+
 ### 📥 Apply AI Reply — the round trip
 Copy the AI's response (code blocks labelled with file paths), run the command, and **pick which edits to apply**. Every write is:
 - ✅ **Reviewable** — shows up in the editor and in `git diff`
@@ -24,6 +26,8 @@ Copy the AI's response (code blocks labelled with file paths), run the command, 
 - ✅ **Safe** — you choose each file; it creates new ones or replaces existing ones
 
 No more hand-copying snippets back block by block.
+
+> **Tip:** copy the AI's *whole* reply, not the chat's per-block "copy code" button — the file path and the ` ``` ` fences must be on the clipboard for the edits to be detected.
 
 ### 🎯 Relevance ranking — keep what matters
 When a bundle must be trimmed to fit a token window, files are ranked by **relevance to your actual task** — filename/path/content overlap with your prompt, plus structural priors that keep entry points, READMEs and config and demote tests, generated code and lockfiles. Dumb bundlers cut the biggest files; this cuts the *least relevant* ones.
