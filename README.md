@@ -1,103 +1,103 @@
-# 🚀 Send to AI - Smart Code Assistant
+# 🚀 Send to AI — Task-Aware Code Bundling, Round-Trip
 
-**Transform your coding workflow with AI-powered project bundling!**
+**Bundle your errors and the connected code for *any* AI, paste the answer back, apply it — no API key.**
 
-## 💰 **Save $111/year vs GitHub Copilot!**
+That's the whole loop, inside your editor:
 
-| Feature | GitHub Copilot | **Send to AI** |
-|---------|---------------|----------------|
+1. **🐛 Bundle Errors** — grab every file VS Code is flagging + the exact error messages.
+2. Paste into ChatGPT, Claude, Gemini — whatever you already pay for (or don't).
+3. **📥 Apply AI Reply** — paste the answer back; it writes the edits to your files, reviewable and undoable.
+
+No web tool that's free of an API key does this — because no web tool can see your Problems panel or write to your files. That's the editor-native moat.
+
+---
+
+## ✨ What makes it different (v3.8.0)
+
+### 🐛 Bundle Errors — task-aware by construction
+One click bundles **only the files VS Code is reporting errors/warnings on**, with the exact diagnostics (`src/api.ts:42:7 [ERROR] Property 'id' does not exist…`) and a ready-to-paste *"please fix these"* prompt. Web bundlers can't read your Problems panel. This can.
+
+### 📥 Apply AI Reply — the round trip
+Copy the AI's response (code blocks labelled with file paths), run the command, and **pick which edits to apply**. Every write is:
+- ✅ **Reviewable** — shows up in the editor and in `git diff`
+- ✅ **Undoable** — a single `Ctrl+Z`
+- ✅ **Safe** — you choose each file; it creates new ones or replaces existing ones
+
+No more hand-copying snippets back block by block.
+
+### 🎯 Relevance ranking — keep what matters
+When a bundle must be trimmed to fit a token window, files are ranked by **relevance to your actual task** — filename/path/content overlap with your prompt, plus structural priors that keep entry points, READMEs and config and demote tests, generated code and lockfiles. Dumb bundlers cut the biggest files; this cuts the *least relevant* ones.
+
+### 🔗 Dependency-graph awareness — connected, not orphaned
+A file imported by a relevant file inherits part of that relevance, so the **local dependencies of what you're working on survive the cut alongside it**. Follows relative `import`/`require`/`from` edges in JS/TS and Python. You get complete, connected context — not orphaned snippets.
+
+---
+
+## 💰 Free + Pro ($9 lifetime)
+
+Works with **any** AI you already use — no monthly subscription, no API key required.
+
+| | GitHub Copilot | **Send to AI** |
+|---|---|---|
 | **Price** | $120/year | **$9 lifetime** |
-| **Project Bundling** | ❌ | ✅ |
-| **Token Estimation** | ❌ | ✅ |
-| **Git Integration** | Limited | ✅ Full |
-| **Multiple AI Support** | OpenAI only | ✅ All AIs |
+| **Bundle errors + connected code** | ❌ | ✅ |
+| **Paste AI reply back & apply** | ❌ | ✅ |
+| **Task-aware relevance ranking** | ❌ | ✅ |
+| **Works with any AI** | OpenAI only | ✅ ChatGPT · Claude · Gemini · local |
+| **Token estimation** | ❌ | ✅ |
 
-## 🎯 **FREE vs PRO Features**
+### 🆓 Free tier
+- Single-file send
+- Basic project bundling (up to 50 files)
+- Standard prompts and ignore patterns
+- 🐛 Bundle Errors + 📥 Apply AI Reply
 
-### 🆓 **FREE Tier**
-- ✅ Single file sending
-- ✅ Basic project bundling (up to 50 files)
-- ✅ Standard AI prompts
-- ✅ Basic ignore patterns
+### 💎 Pro tier ($9 lifetime)
+- **Unlimited** project bundling
+- Advanced token estimation & cost calculation
+- 4 output formats (Standard, XML, Compact, Minimal)
+- Git integration (bundle only changed files)
+- Advanced comment stripping & custom ignore patterns
+- Visual file-tree generation
+- Priority support
 
-### 💎 **PRO Tier ($9 lifetime)**
-- ✅ **Unlimited project bundling**
-- ✅ **Advanced token estimation & cost calculation**
-- ✅ **4 output formats** (Standard, XML, Compact, Minimal)
-- ✅ **Git integration** (bundle only changed files)
-- ✅ **Advanced comment stripping**
-- ✅ **Custom ignore patterns**
-- ✅ **Visual file tree generation**
-- ✅ **Priority support**
+**[🚀 Upgrade — $9 lifetime](https://sendtoai.dev)** · No subscription. Use forever.
 
-## 🚀 **Why Choose Send to AI?**
+---
 
-✅ **One-time payment** - No monthly subscriptions  
-✅ **Works with ANY AI** - ChatGPT, Claude, Gemini, local models  
-✅ **Smart bundling** - Handles large projects intelligently  
-✅ **Developer-focused** - Built by developers, for developers  
+## 📦 Quick start
 
-## 📦 **Quick Start**
+1. **Install** the extension — the **SendToAI** icon appears in the activity bar.
+2. Open the panel and use the buttons, or right-click a file/folder → **Send to AI**.
+3. Paste into your favourite AI chat — then copy its reply and hit **📥 Apply AI Reply**.
 
-1. **Install** the extension
-2. **Right-click** any file or folder
-3. **Select** "Send to AI" or "Bundle Project"
-4. **Paste** into your favorite AI chat!
+### Typical loop
+```
+🐛 Bundle Errors  →  paste into Claude/ChatGPT  →  copy reply  →  📥 Apply AI Reply  →  Ctrl+Z if you don't like it
+```
 
-### 🔑 **Upgrade to Pro**
-1. Visit [sendtoai.dev](https://sendtoai.dev) 
-2. Purchase Pro license ($9 lifetime)
-3. Enter license key in VS Code settings
-4. Unlock unlimited bundling!
+---
 
-## 🎯 **Perfect For:**
+## 🎮 Usage
 
-- 📊 **Code reviews** with AI assistance
-- 🐛 **Bug analysis** across multiple files  
-- 🔄 **Refactoring** large codebases
-- 📚 **Documentation** generation
-- 🧪 **Test creation** from existing code
-- 💡 **Architecture discussions** with AI
+### Sidebar panel
+The fastest path — open the **SendToAI** view and click:
+- **🐛 Bundle Errors** — bundle everything with a problem + the messages
+- **📥 Apply AI Reply** — apply the AI's code blocks back to your files
+- Bundle project, pick output format, set a token window, estimate cost
 
-## ⚙️ **Features**
+### Keyboard shortcuts
+- `Ctrl+Alt+A` (`Cmd+Alt+A`): Send current file
+- `Ctrl+Alt+B` (`Cmd+Alt+B`): Bundle entire project
 
-### 🎨 **Smart Bundling**
-- Automatically detects project structure
-- Respects `.gitignore` and custom ignore patterns
-- Generates clean file trees
-- Estimates token costs for different AI models
+### Command Palette
+`Ctrl+Shift+P` → type **"Send to AI"** → pick any command (including Bundle Errors / Apply AI Response).
 
-### 🔧 **Multiple Output Formats**
-- **Standard**: Clean, readable format
-- **XML**: Structured for Claude and advanced AIs
-- **Compact**: Minimal whitespace for token efficiency
-- **Minimal**: Essential code only
+---
 
-### 📊 **Token Management**  
-- Real-time token estimation
-- Cost calculation for major AI APIs
-- Auto-trimming to fit context windows
-- Progress indicators for large projects
+## ⚙️ Configuration
 
-## 🎮 **Usage**
-
-### Method 1: Context Menu
-1. Right-click any file/folder in Explorer
-2. Select "Bundle Project for AI"
-3. Choose your settings and copy!
-
-### Method 2: Keyboard Shortcuts
-- `Ctrl+Alt+A` (Cmd+Alt+A on Mac): Send current file
-- `Ctrl+Alt+B` (Cmd+Alt+B on Mac): Bundle entire project
-
-### Method 3: Command Palette
-1. Open Command Palette (`Ctrl+Shift+P`)
-2. Type "Send to AI"
-3. Select your preferred option
-
-## ⚙️ **Configuration**
-
-Access settings via `File > Preferences > Settings` and search for "Send to AI":
+`File > Preferences > Settings` → search **"Send to AI"**:
 
 ```json
 {
@@ -107,8 +107,7 @@ Access settings via `File > Preferences > Settings` and search for "Send to AI":
 ```
 
 ### Custom ignore patterns
-
-Create a `.sendtoaiignore` file in your project root — same syntax as `.gitignore`:
+Create a `.sendtoaiignore` in your project root — same syntax as `.gitignore`:
 
 ```
 # .sendtoaiignore
@@ -117,101 +116,49 @@ secrets/**
 docs/
 ```
 
-## 🎯 **Pro Features Deep Dive**
+---
 
-### 📊 **Advanced Token Estimation**
-- Real-time cost calculation for GPT-4, Claude, Gemini
-- Token-per-file breakdown
-- Cost optimization suggestions
+## 🤝 Works with every AI
 
-### 🌳 **Visual File Trees**
-```
-📁 my-project/
-├── 📄 src/
-│   ├── 📄 components/
-│   │   └── 📄 Button.tsx (450 tokens)
-│   └── 📄 utils/
-│       └── 📄 helpers.ts (280 tokens)
-└── 📄 package.json (120 tokens)
-
-Total: 850 tokens (~$0.03 with GPT-4)
-```
-
-### 🔄 **Git Integration** 
-Bundle only what matters:
-- Changed files since last commit
-- Staged files only
-- Files in current branch vs main
-- Custom git queries
-
-## 🤝 **AI Platform Support**
-
-Works perfectly with:
-- **ChatGPT** (GPT-3.5, GPT-4, GPT-4 Turbo)
+- **ChatGPT** (GPT-4, GPT-4 Turbo, and newer)
 - **Claude** (Haiku, Sonnet, Opus)
 - **Google Gemini** (Pro, Ultra)
 - **Local models** (Ollama, LM Studio)
-- **API integrations** (OpenAI, Anthropic, etc.)
 
-## 📈 **Success Stories**
-
-> *"Saved me 10+ hours per week on code reviews. The Pro version pays for itself in the first day!"* - Senior Developer
-
-> *"Finally, an alternative to expensive monthly AI subscriptions. One payment, lifetime value!"* - Tech Lead
-
-> *"The git integration is a game-changer for reviewing pull requests with AI."* - DevOps Engineer
-
-## 🔒 **Privacy & Security**
-
-- ✅ **Zero data collection** - your code stays on your machine
-- ✅ **No telemetry** - completely private
-- ✅ **Local processing** - all bundling happens locally
-- ✅ **Open source** - audit the code yourself
-
-## 💡 **Tips for Maximum Value**
-
-### 🎯 **Best Practices**
-1. **Use specific prompts**: "Review this React component for security issues"
-2. **Leverage Pro features**: Use XML format for structured analysis
-3. **Optimize bundles**: Use ignore patterns to exclude irrelevant files
-4. **Git integration**: Only send changed files for focused reviews
-
-### 🚀 **Pro Tips**
-- Use `@sendtoai.dev` in your prompts for better context
-- Combine with GitHub Copilot for the ultimate AI coding setup
-- Set up custom ignore patterns for different project types
-- Use compact format when approaching token limits
-
-## 🆙 **Upgrade to Pro Today!**
-
-### 💰 **Why Pro is Worth It:**
-- **Save $111/year** vs monthly AI subscriptions
-- **Unlimited bundling** - no file limits
-- **Advanced features** that 10x your productivity  
-- **One-time payment** - use forever
-- **Priority support** - get help when you need it
-
-### 🎁 **Limited Time Bonus:**
-- ✅ Free updates for life
-- ✅ Access to beta features
-- ✅ Priority feature requests
-- ✅ Direct developer support
-
-**[🚀 Upgrade Now - $9 Lifetime](https://sendtoai.dev)**
-
-## 📞 **Support**
-
-- 🌐 **Website**: [sendtoai.dev](https://sendtoai.dev)
-- 🐛 **Found a bug?** [Open an issue](https://github.com/oxainz/sendtoai-vscode/issues)  
-- 💬 **Need help?** Contact us at support@sendtoai.dev
-- ⭐ **Love it?** [Rate us 5 stars](https://marketplace.visualstudio.com/items?itemName=oxainz.sendtoai&ssr=false#review-details)
-
-## 📄 **License**
-
-MIT License - see [LICENSE](LICENSE) for details.
+Output formats include an **XML** mode tuned for Claude and structured analysis, plus **Compact**/**Minimal** for tight token budgets.
 
 ---
 
-**Ready to revolutionize your AI coding workflow? Install now and upgrade to Pro for unlimited power! 🚀**
+## 🔒 Privacy & security
 
-*Save $111/year vs GitHub Copilot. One payment, lifetime access.*
+- ✅ **Zero data collection** — your code stays on your machine
+- ✅ **No telemetry** — all bundling happens locally
+- ✅ **0 known vulnerabilities** — dependencies patched and pinned (`npm audit` clean)
+- ✅ **Open source** — audit it yourself
+
+---
+
+## 🎯 Perfect for
+
+- 🐛 Fixing a wall of compiler/linter errors in one paste
+- 📊 AI code reviews across multiple connected files
+- 🔄 Refactoring with full, dependency-aware context
+- 🧪 Generating tests from existing code
+- 💡 Architecture discussions grounded in the real codebase
+
+---
+
+## 📞 Support
+
+- 🌐 **Website**: [sendtoai.dev](https://sendtoai.dev)
+- 🐛 **Found a bug?** [Open an issue](https://github.com/oxainz/sendtoai-vscode/issues)
+- 💬 **Need help?** support@sendtoai.dev
+- ⭐ **Love it?** [Rate it 5 stars](https://marketplace.visualstudio.com/items?itemName=oxainz.sendtoai&ssr=false#review-details)
+
+## 📄 License
+
+MIT — see [LICENSE](LICENSE).
+
+---
+
+**Bundle your errors + connected code for any AI, paste the answer back, apply it — no API key. One payment, lifetime access.** 🔧
