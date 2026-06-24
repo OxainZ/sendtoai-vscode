@@ -4,6 +4,12 @@
     "description": "🚀 Bundle entire projects for AI analysis. FREE: Basic bundling (50 files) | PRO: Unlimited files + advanced features ($9 lifetime). Save $111/year vs GitHub Copilot monthly subscription.",
     "version": "3.8.0",
     "publisher": "oxainz",
+    "icon": "resources/icon.png",
+    "license": "MIT",
+    "galleryBanner": {
+        "color": "#1e1e1e",
+        "theme": "dark"
+    },
     "engines": {
         "vscode": "^1.74.0"
     },
