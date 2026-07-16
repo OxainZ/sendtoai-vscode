@@ -158,12 +158,20 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
     this._view?.webview.postMessage({ command: busy ? 'busy' : 'idle' });
   }
 
+  private _getNonce(): string {
+    let text = '';
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    for (let i = 0; i < 32; i++) { text += chars.charAt(Math.floor(Math.random() * chars.length)); }
+    return text;
+  }
+
   private _html(): string {
+    const nonce = this._getNonce();
     return /* html */`<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -398,9 +406,9 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
 <div class="section">
   <div class="section-label">Bundle Mode</div>
   <div class="mode-tabs">
-    <button class="mode-tab active" data-mode="project" onclick="setMode('project')">📦 Project</button>
-    <button class="mode-tab" data-mode="tabs" onclick="setMode('tabs')">📄 Open Tabs</button>
-    <button class="mode-tab" data-mode="git" onclick="setMode('git')">🔀 Git Changes</button>
+    <button class="mode-tab active" data-mode="project" data-act="setMode" data-arg="project">📦 Project</button>
+    <button class="mode-tab" data-mode="tabs" data-act="setMode" data-arg="tabs">📄 Open Tabs</button>
+    <button class="mode-tab" data-mode="git" data-act="setMode" data-arg="git">🔀 Git Changes</button>
   </div>
 </div>
 
@@ -410,17 +418,17 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
 
   <!-- Preset dropdown -->
   <div class="preset-bar">
-    <select id="presetSelect" onchange="onPresetChange()" style="width:auto;flex:1">
+    <select id="presetSelect" style="width:auto;flex:1">
       <option value="">— Load a preset —</option>
     </select>
-    <button class="btn-sm" id="deletePresetBtn" onclick="deletePreset()" title="Delete preset" style="display:none">🗑</button>
+    <button class="btn-sm" id="deletePresetBtn" data-act="deletePreset" title="Delete preset" style="display:none">🗑</button>
   </div>
 
   <div class="picker-toolbar">
     <span class="picker-lbl" id="pickerLabel">Scanning…</span>
-    <button class="btn-sm" onclick="pickerAll()">All</button>
-    <button class="btn-sm" onclick="pickerNone()">None</button>
-    <button class="btn-sm" onclick="requestScan()">↺</button>
+    <button class="btn-sm" data-act="pickerAll">All</button>
+    <button class="btn-sm" data-act="pickerNone">None</button>
+    <button class="btn-sm" data-act="requestScan">↺</button>
   </div>
   <div class="tree-scroll" id="treeScroll">
     <div class="tree-loading">Loading file tree…</div>
@@ -430,19 +438,18 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
   <!-- Save preset area -->
   <div class="preset-save-area">
     <div class="preset-save-form" id="savePresetForm">
-      <input class="preset-name-input" id="presetNameInput" type="text" placeholder="Preset name…" maxlength="40"
-             onkeydown="if(event.key==='Enter')confirmSavePreset();if(event.key==='Escape')cancelSavePreset();">
-      <button class="btn-sm" onclick="confirmSavePreset()">Save</button>
-      <button class="btn-sm" onclick="cancelSavePreset()">✕</button>
+      <input class="preset-name-input" id="presetNameInput" type="text" placeholder="Preset name…" maxlength="40">
+      <button class="btn-sm" data-act="confirmSavePreset">Save</button>
+      <button class="btn-sm" data-act="cancelSavePreset">✕</button>
     </div>
-    <button class="btn-sm" id="savePresetBtn" onclick="showSavePreset()" style="margin-top:4px">💾 Save Preset</button>
+    <button class="btn-sm" id="savePresetBtn" data-act="showSavePreset" style="margin-top:4px">💾 Save Preset</button>
   </div>
 </div>
 
 <!-- Prompt Template -->
 <div class="section">
   <div class="section-label">Prompt Template</div>
-  <select id="promptSelect" onchange="onPromptChange()">
+  <select id="promptSelect">
     <option value="">— No prompt (paste only) —</option>
     <option value="review">Review this code for bugs, security issues, and improvements</option>
     <option value="explain">Explain what this codebase does and how it's structured</option>
@@ -484,7 +491,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
   <textarea id="projectNotes" placeholder="Persistent context for AI — e.g. 'Auth uses JWT. DB is Postgres. Main API in src/api/'"></textarea>
   <div class="notes-footer">
     <label><input type="checkbox" id="includeCtx"> Include in every bundle</label>
-    <button class="btn-sm" onclick="saveContext()">💾 Save <span class="save-ok" id="saveOk">✓ Saved</span></button>
+    <button class="btn-sm" data-act="saveContext">💾 Save <span class="save-ok" id="saveOk">✓ Saved</span></button>
   </div>
 </div>
 
@@ -492,12 +499,12 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
 <div class="upgrade-banner" id="upgradeBanner">
   <p>⚡ <strong>Pro feature</strong> — Free tier is limited to 50 files.<br>
   Upgrade for unlimited files, presets, and git diff mode.</p>
-  <button class="btn-upgrade" onclick="openUrl('https://sendtoai.lemonsqueezy.com/checkout/buy/e8764352-b784-409e-8d59-c44fd9aad90c')">Upgrade to Pro →</button>
-  <button class="btn-upgrade" style="margin-top:6px;background:#444;" onclick="send('enterLicenseKey')">Already have a key? Activate it →</button>
+  <button class="btn-upgrade" data-act="openUrl" data-arg="https://sendtoai.lemonsqueezy.com/checkout/buy/e8764352-b784-409e-8d59-c44fd9aad90c">Upgrade to Pro →</button>
+  <button class="btn-upgrade" style="margin-top:6px;background:#444;" data-act="send" data-arg="enterLicenseKey">Already have a key? Activate it →</button>
 </div>
 
 <!-- Bundle Button -->
-<button class="btn-bundle" id="bundleBtn" onclick="doBundle()">
+<button class="btn-bundle" id="bundleBtn" data-act="doBundle">
   <span id="btnIcon">📦</span>
   <span id="btnLabel">Bundle to Clipboard</span>
   <span id="shortcutHint" style="font-size:10px;font-weight:400;opacity:0.7">Ctrl+Alt+A</span>
@@ -505,21 +512,21 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
 
 <!-- Smart actions (editor-native — what web bundlers can't do) -->
 <div class="ai-row" style="margin-top:6px;">
-  <button class="btn-ai" style="background:#3a3a5a;" onclick="send('bundleErrors')" title="Bundle every file with an error/warning + the exact messages, ready to paste into your AI">🐛 Bundle Errors</button>
-  <button class="btn-ai" style="background:#3a5a3a;" onclick="send('applyResponse')" title="Paste the AI's reply, then apply its code edits straight to your files (undoable)">📥 Apply AI Reply</button>
+  <button class="btn-ai" style="background:#3a3a5a;" data-act="send" data-arg="bundleErrors" title="Bundle every file with an error/warning + the exact messages, ready to paste into your AI">🐛 Bundle Errors</button>
+  <button class="btn-ai" style="background:#3a5a3a;" data-act="send" data-arg="applyResponse" title="Paste the AI's reply, then apply its code edits straight to your files (undoable)">📥 Apply AI Reply</button>
 </div>
 
 <!-- AI Quick Open -->
 <div class="ai-row">
-  <button class="btn-ai claude"  onclick="openUrl('https://claude.ai')">Claude ↗</button>
-  <button class="btn-ai chatgpt" onclick="openUrl('https://chatgpt.com')">ChatGPT ↗</button>
-  <button class="btn-ai gemini"  onclick="openUrl('https://gemini.google.com')">Gemini ↗</button>
+  <button class="btn-ai claude"  data-act="openUrl" data-arg="https://claude.ai">Claude ↗</button>
+  <button class="btn-ai chatgpt" data-act="openUrl" data-arg="https://chatgpt.com">ChatGPT ↗</button>
+  <button class="btn-ai gemini"  data-act="openUrl" data-arg="https://gemini.google.com">Gemini ↗</button>
 </div>
 
 <!-- Pro activation row -->
 <div id="activateRow" style="text-align:center;margin-bottom:8px;">
   <span style="font-size:10px;color:var(--vscode-descriptionForeground);">Have a Pro license? </span>
-  <a href="#" style="font-size:10px;color:#e07b39;text-decoration:none;" onclick="send('enterLicenseKey');return false;">Activate it here →</a>
+  <a href="#" style="font-size:10px;color:#e07b39;text-decoration:none;" data-act="send" data-arg="enterLicenseKey">Activate it here →</a>
 </div>
 
 <div class="divider"></div>
@@ -553,19 +560,37 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
     <div class="types-wrap" id="typePills"></div>
   </div>
   <div id="warnBox" style="display:none" class="warn">⚠️ Large bundle — consider Sonnet 4.6 or Opus (support 1M context)</div>
-  <button class="btn-copy" onclick="send('copyAgain')">📋 Copy Again</button>
+  <button class="btn-copy" data-act="send" data-arg="copyAgain">📋 Copy Again</button>
   <p class="timestamp" id="ts"></p>
 </div>
 
 <p class="shortcut"><kbd>Ctrl+Alt+A</kbd> / <kbd>⌘+Alt+A</kbd></p>
 
-<script>
+<script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   let currentMode = 'project';
 
   // ── Core helpers ──────────────────────────────────────────────────────────────
   function send(cmd, extra) { vscode.postMessage({ command: cmd, ...extra }); }
   function openUrl(url)      { vscode.postMessage({ command: 'openUrl', url }); }
+
+  // ── CSP-safe event wiring (replaces inline handlers; script-src is nonce-locked) ──
+  const ACTIONS = { setMode, onPromptChange, onPresetChange, deletePreset,
+    pickerAll, pickerNone, requestScan, confirmSavePreset, cancelSavePreset,
+    showSavePreset, saveContext, doBundle, send, openUrl };
+  document.addEventListener('click', function (e) {
+    const el = e.target.closest('[data-act]');
+    if (!el) { return; }
+    if (el.tagName === 'A') { e.preventDefault(); }
+    const fn = ACTIONS[el.dataset.act];
+    if (fn) { fn(el.dataset.arg); }
+  });
+  document.getElementById('presetSelect').addEventListener('change', onPresetChange);
+  document.getElementById('promptSelect').addEventListener('change', onPromptChange);
+  document.getElementById('presetNameInput').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter')  { confirmSavePreset(); }
+    if (e.key === 'Escape') { cancelSavePreset(); }
+  });
 
   // ── Mode switching ─────────────────────────────────────────────────────────────
   function setMode(mode) {

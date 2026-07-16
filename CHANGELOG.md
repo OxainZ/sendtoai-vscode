@@ -3,6 +3,20 @@
 All notable changes to **Send to AI** are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [3.8.1] — 2026-07-15
+
+**Security hardening.** Locked down the sidebar webview's Content-Security-Policy
+to eliminate `script-src 'unsafe-inline'` — the standard webview-XSS enabler
+flagged by extension security reviews.
+
+- Webview now uses a per-render **nonce**; `script-src` is `'nonce-…'`, so only
+  the extension's own script can execute (any injected `<script>` is blocked).
+- Converted all inline `onclick`/`onchange`/`onkeydown` handlers to a single
+  delegated event listener (nonces don't cover inline handlers). No UI or
+  behavior change — same actions, same functions.
+- No data-flow change was needed: file names, presets, and types were already
+  rendered via `textContent`/`createElement`, never raw `innerHTML`.
+
 ## [3.8.0] — 2026-06-23
 
 The release that makes SendToAI **task-aware and round-trip** — bundle the code
