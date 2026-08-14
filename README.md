@@ -37,18 +37,18 @@ A file imported by a relevant file inherits part of that relevance, so the **loc
 
 ---
 
-## 💰 Free + Pro ($9 lifetime)
+## 💰 Free + Pro ($9 one-time)
 
-Works with **any** AI you already use — no monthly subscription, no API key required.
+Works with **any** AI you already use — it's a companion to your existing chat subscription (or a free one), not a replacement for it. No monthly fee, no API key.
 
-| | GitHub Copilot | **Send to AI** |
-|---|---|---|
-| **Price** | $120/year | **$9 lifetime** |
-| **Bundle errors + connected code** | ❌ | ✅ |
-| **Paste AI reply back & apply** | ❌ | ✅ |
-| **Task-aware relevance ranking** | ❌ | ✅ |
-| **Works with any AI** | OpenAI only | ✅ ChatGPT · Claude · Gemini · local |
-| **Token estimation** | ❌ | ✅ |
+| | Copy-pasting by hand | Web bundler tools | **Send to AI** |
+|---|---|---|---|
+| **Bundle errors straight from the Problems panel** | ❌ | ❌ can't see your editor | ✅ |
+| **Apply the AI's reply back to your files** | hand-copy each block | ❌ | ✅ one command, undoable |
+| **Task-aware relevance ranking on trim** | — | biggest-file-first cuts | ✅ keeps what matters |
+| **Dependency-graph aware selection** | ❌ | ❌ | ✅ |
+| **Your code leaves your machine** | to your AI only | uploaded to their server | to your AI only |
+| **Price** | free (your time) | varies | **free · Pro $9 once** |
 
 ### 🆓 Free tier
 - Single-file send
@@ -165,4 +165,4 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-**Bundle your errors + connected code for any AI, paste the answer back, apply it — no API key. One payment, lifetime access.** 🔧
+**Bundle your errors + connected code for any AI, paste the answer back, apply it — no API key. Free tier, Pro is a single $9.** 🔧

@@ -210,6 +210,30 @@ function parseFileBlocks(text: string): { path: string; content: string }[] {
 
 // ── Extension entry point ─────────────────────────────────────────────────────
 
+// ── Review nudge — one polite ask, only after the extension has proven its value ──
+const REVIEW_URL = 'https://marketplace.visualstudio.com/items?itemName=oxainz.sendtoai&ssr=false#review-details';
+async function maybeAskForReview(context: vscode.ExtensionContext): Promise<void> {
+  try {
+    if (context.globalState.get<boolean>('reviewAskDone')) { return; }
+    const n = (context.globalState.get<number>('successCount') ?? 0) + 1;
+    await context.globalState.update('successCount', n);
+    const askAt = context.globalState.get<number>('reviewAskAt') ?? 5;
+    if (n < askAt) { return; }
+    const pick = await vscode.window.showInformationMessage(
+      `SendToAI has bundled for you ${n} times — if it's saving you time, a Marketplace review really helps a small extension get found.`,
+      '⭐ Rate it', 'Later', "Don't ask again");
+    if (pick === '⭐ Rate it') {
+      vscode.env.openExternal(vscode.Uri.parse(REVIEW_URL));
+      await context.globalState.update('reviewAskDone', true);
+    } else if (pick === "Don't ask again") {
+      await context.globalState.update('reviewAskDone', true);
+    } else {
+      // "Later" or dismissed — back off substantially before asking once more
+      await context.globalState.update('reviewAskAt', n + 15);
+    }
+  } catch { /* never let the nudge break a successful bundle */ }
+}
+
 export function activate(context: vscode.ExtensionContext) {
   const panel = new SendToAIPanel(context.extensionUri);
 
@@ -327,6 +351,7 @@ export function activate(context: vscode.ExtensionContext) {
       vscode.window.showInformationMessage(
         `\u2705 Copied! ${result.fileCount} files \u00b7 ~${result.tokenEstimate.toLocaleString()} tokens`
       );
+      void maybeAskForReview(context);
 
       if (vscode.workspace.getConfiguration('sendtoai').get<boolean>('autoOpenAI')) {
         vscode.env.openExternal(vscode.Uri.parse('https://claude.ai'));
@@ -385,6 +410,7 @@ export function activate(context: vscode.ExtensionContext) {
         await vscode.env.clipboard.writeText(result.bundle);
         vscode.window.showInformationMessage(
           `✅ Copied! ${errorFiles.size} file(s) with problems + ${problemLines.length} diagnostics · ~${result.tokenEstimate.toLocaleString()} tokens. Paste into your AI.`);
+        void maybeAskForReview(context);
         if (vscode.workspace.getConfiguration('sendtoai').get<boolean>('autoOpenAI')) {
           vscode.env.openExternal(vscode.Uri.parse('https://claude.ai'));
         }
@@ -446,6 +472,7 @@ export function activate(context: vscode.ExtensionContext) {
       vscode.window.showInformationMessage(ok
         ? `✅ Applied ${picked.length} file(s). Review in the editor or git diff · Ctrl+Z to undo.`
         : 'SendToAI: Could not apply the edits.');
+      if (ok) { void maybeAskForReview(context); }
     }),
 
     vscode.commands.registerCommand('sendtoai.upgradeToPro', () => {
