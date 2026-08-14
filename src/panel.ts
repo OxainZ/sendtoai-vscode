@@ -60,6 +60,9 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
     _token: vscode.CancellationToken,
   ): void {
     this._view = webviewView;
+    webviewView.onDidDispose(() => {
+      if (this._view === webviewView) { this._view = undefined; }
+    });
     webviewView.webview.options = { enableScripts: true, localResourceRoots: [this._extensionUri] };
     webviewView.webview.html = this._html();
 
@@ -116,7 +119,8 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
           }
           break;
         case 'openUrl':
-          if (msg.url) { vscode.env.openExternal(vscode.Uri.parse(msg.url)); }
+          // Only http(s) — never let a webview message launch arbitrary URI handlers
+          if (msg.url && /^https?:\/\//i.test(msg.url)) { vscode.env.openExternal(vscode.Uri.parse(msg.url)); }
           break;
         case 'enterLicenseKey':
           vscode.commands.executeCommand('sendtoai.enterLicenseKey');
@@ -171,7 +175,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

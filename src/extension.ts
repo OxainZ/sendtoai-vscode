@@ -44,6 +44,7 @@ function lsPost(path: string, body: object): Promise<any> {
     }, (res: import('http').IncomingMessage) => {
       let data = '';
       res.on('data', (chunk: Buffer) => { data += chunk; });
+      res.on('error', reject);
       res.on('end', () => {
         try { resolve(JSON.parse(data)); }
         catch { reject(new Error('Invalid JSON')); }
@@ -209,6 +210,30 @@ function parseFileBlocks(text: string): { path: string; content: string }[] {
 
 // ── Extension entry point ─────────────────────────────────────────────────────
 
+// ── Review nudge — one polite ask, only after the extension has proven its value ──
+const REVIEW_URL = 'https://marketplace.visualstudio.com/items?itemName=oxainz.sendtoai&ssr=false#review-details';
+async function maybeAskForReview(context: vscode.ExtensionContext): Promise<void> {
+  try {
+    if (context.globalState.get<boolean>('reviewAskDone')) { return; }
+    const n = (context.globalState.get<number>('successCount') ?? 0) + 1;
+    await context.globalState.update('successCount', n);
+    const askAt = context.globalState.get<number>('reviewAskAt') ?? 5;
+    if (n < askAt) { return; }
+    const pick = await vscode.window.showInformationMessage(
+      `SendToAI has bundled for you ${n} times — if it's saving you time, a Marketplace review really helps a small extension get found.`,
+      '⭐ Rate it', 'Later', "Don't ask again");
+    if (pick === '⭐ Rate it') {
+      vscode.env.openExternal(vscode.Uri.parse(REVIEW_URL));
+      await context.globalState.update('reviewAskDone', true);
+    } else if (pick === "Don't ask again") {
+      await context.globalState.update('reviewAskDone', true);
+    } else {
+      // "Later" or dismissed — back off substantially before asking once more
+      await context.globalState.update('reviewAskAt', n + 15);
+    }
+  } catch { /* never let the nudge break a successful bundle */ }
+}
+
 export function activate(context: vscode.ExtensionContext) {
   const panel = new SendToAIPanel(context.extensionUri);
 
@@ -219,14 +244,17 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   // Validate license in background on startup
-  refreshLicense(getLicenseKey(), context).then(valid => panel.sendProStatus(valid));
+  refreshLicense(getLicenseKey(), context).then(
+    valid => panel.sendProStatus(valid),
+    () => { /* storage/network failure — stay on free tier */ },
+  );
 
   const broadcastPro = () => panel.sendProStatus(cachedProStatus);
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(async e => {
       if (e.affectsConfiguration('sendtoai.licenseKey')) {
-        const valid = await refreshLicense(getLicenseKey(), context, true);
+        const valid = await refreshLicense(getLicenseKey(), context, true).catch(() => false);
         panel.sendProStatus(valid);
       }
     })
@@ -323,6 +351,7 @@ export function activate(context: vscode.ExtensionContext) {
       vscode.window.showInformationMessage(
         `\u2705 Copied! ${result.fileCount} files \u00b7 ~${result.tokenEstimate.toLocaleString()} tokens`
       );
+      void maybeAskForReview(context);
 
       if (vscode.workspace.getConfiguration('sendtoai').get<boolean>('autoOpenAI')) {
         vscode.env.openExternal(vscode.Uri.parse('https://claude.ai'));
@@ -381,6 +410,7 @@ export function activate(context: vscode.ExtensionContext) {
         await vscode.env.clipboard.writeText(result.bundle);
         vscode.window.showInformationMessage(
           `✅ Copied! ${errorFiles.size} file(s) with problems + ${problemLines.length} diagnostics · ~${result.tokenEstimate.toLocaleString()} tokens. Paste into your AI.`);
+        void maybeAskForReview(context);
         if (vscode.workspace.getConfiguration('sendtoai').get<boolean>('autoOpenAI')) {
           vscode.env.openExternal(vscode.Uri.parse('https://claude.ai'));
         }
@@ -404,7 +434,16 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
       const byPath = new Map<string, string>();
-      for (const b of blocks) { byPath.set(b.path, b.content); }
+      for (const b of blocks) {
+        // Clipboard content is untrusted — never let a path escape the workspace root
+        const norm = path.posix.normalize(b.path);
+        if (path.posix.isAbsolute(norm) || norm === '..' || norm.startsWith('../')) { continue; }
+        byPath.set(norm, b.content);
+      }
+      if (byPath.size === 0) {
+        vscode.window.showWarningMessage('SendToAI: All file paths in the reply point outside the workspace — nothing to apply.');
+        return;
+      }
       const items = await Promise.all([...byPath.entries()].map(async ([p, c]) => {
         let exists = true;
         try { await vscode.workspace.fs.stat(vscode.Uri.joinPath(root, p)); } catch { exists = false; }
@@ -433,6 +472,7 @@ export function activate(context: vscode.ExtensionContext) {
       vscode.window.showInformationMessage(ok
         ? `✅ Applied ${picked.length} file(s). Review in the editor or git diff · Ctrl+Z to undo.`
         : 'SendToAI: Could not apply the edits.');
+      if (ok) { void maybeAskForReview(context); }
     }),
 
     vscode.commands.registerCommand('sendtoai.upgradeToPro', () => {
@@ -454,7 +494,18 @@ export function activate(context: vscode.ExtensionContext) {
 
       const validating = vscode.window.setStatusBarMessage('SendToAI: Activating license…');
       try {
-        // Clear any existing activation so we register this machine fresh
+        // Free the old slot first (best-effort): re-activating creates a NEW
+        // instance server-side, so deleting the old one without deactivating
+        // burned one of the 5 activation slots on every key re-entry.
+        const oldStr = await context.secrets.get(SECRETS_KEY);
+        if (oldStr) {
+          try {
+            const old: StoredActivation = JSON.parse(oldStr);
+            await lsPost('/v1/licenses/deactivate', {
+              license_key: inputKey, instance_id: old.instanceId,
+            });
+          } catch { /* wrong key for that instance, or offline — nothing to free */ }
+        }
         await context.secrets.delete(SECRETS_KEY);
         const result = await activateLicense(inputKey, context);
         validating.dispose();
