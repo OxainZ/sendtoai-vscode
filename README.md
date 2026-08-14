@@ -2,6 +2,9 @@
 
 **Bundle your errors and the connected code for *any* AI, paste the answer back, apply it — no API key.**
 
+<img src="images/panel.png" alt="SendToAI panel: pick bundle mode, check files with live token estimates, choose prompt and output format, bundle to clipboard" width="480">
+
+
 That's the whole loop, inside your editor:
 
 1. **🐛 Bundle Errors** — grab every file VS Code is flagging + the exact error messages.
