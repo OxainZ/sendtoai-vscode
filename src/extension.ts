@@ -494,7 +494,18 @@ export function activate(context: vscode.ExtensionContext) {
 
       const validating = vscode.window.setStatusBarMessage('SendToAI: Activating license…');
       try {
-        // Clear any existing activation so we register this machine fresh
+        // Free the old slot first (best-effort): re-activating creates a NEW
+        // instance server-side, so deleting the old one without deactivating
+        // burned one of the 5 activation slots on every key re-entry.
+        const oldStr = await context.secrets.get(SECRETS_KEY);
+        if (oldStr) {
+          try {
+            const old: StoredActivation = JSON.parse(oldStr);
+            await lsPost('/v1/licenses/deactivate', {
+              license_key: inputKey, instance_id: old.instanceId,
+            });
+          } catch { /* wrong key for that instance, or offline — nothing to free */ }
+        }
         await context.secrets.delete(SECRETS_KEY);
         const result = await activateLicense(inputKey, context);
         validating.dispose();
