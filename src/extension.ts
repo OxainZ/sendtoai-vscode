@@ -44,6 +44,7 @@ function lsPost(path: string, body: object): Promise<any> {
     }, (res: import('http').IncomingMessage) => {
       let data = '';
       res.on('data', (chunk: Buffer) => { data += chunk; });
+      res.on('error', reject);
       res.on('end', () => {
         try { resolve(JSON.parse(data)); }
         catch { reject(new Error('Invalid JSON')); }
@@ -219,14 +220,17 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   // Validate license in background on startup
-  refreshLicense(getLicenseKey(), context).then(valid => panel.sendProStatus(valid));
+  refreshLicense(getLicenseKey(), context).then(
+    valid => panel.sendProStatus(valid),
+    () => { /* storage/network failure — stay on free tier */ },
+  );
 
   const broadcastPro = () => panel.sendProStatus(cachedProStatus);
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(async e => {
       if (e.affectsConfiguration('sendtoai.licenseKey')) {
-        const valid = await refreshLicense(getLicenseKey(), context, true);
+        const valid = await refreshLicense(getLicenseKey(), context, true).catch(() => false);
         panel.sendProStatus(valid);
       }
     })
@@ -404,7 +408,16 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
       const byPath = new Map<string, string>();
-      for (const b of blocks) { byPath.set(b.path, b.content); }
+      for (const b of blocks) {
+        // Clipboard content is untrusted — never let a path escape the workspace root
+        const norm = path.posix.normalize(b.path);
+        if (path.posix.isAbsolute(norm) || norm === '..' || norm.startsWith('../')) { continue; }
+        byPath.set(norm, b.content);
+      }
+      if (byPath.size === 0) {
+        vscode.window.showWarningMessage('SendToAI: All file paths in the reply point outside the workspace — nothing to apply.');
+        return;
+      }
       const items = await Promise.all([...byPath.entries()].map(async ([p, c]) => {
         let exists = true;
         try { await vscode.workspace.fs.stat(vscode.Uri.joinPath(root, p)); } catch { exists = false; }
