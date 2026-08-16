@@ -32,10 +32,10 @@ No more hand-copying snippets back block by block.
 
 > **Tip:** copy the AI's *whole* reply, not the chat's per-block "copy code" button — the file path and the ` ``` ` fences must be on the clipboard for the edits to be detected.
 
-### 🎯 Relevance ranking — keep what matters
+### 🎯 Relevance ranking — keep what matters *(Pro · part of Fit to AI Window)*
 When a bundle must be trimmed to fit a token window, files are ranked by **relevance to your actual task** — filename/path/content overlap with your prompt, plus structural priors that keep entry points, READMEs and config and demote tests, generated code and lockfiles. Dumb bundlers cut the biggest files; this cuts the *least relevant* ones.
 
-### 🔗 Dependency-graph awareness — connected, not orphaned
+### 🔗 Dependency-graph awareness — connected, not orphaned *(Pro · part of Fit to AI Window)*
 A file imported by a relevant file inherits part of that relevance, so the **local dependencies of what you're working on survive the cut alongside it**. Follows relative `import`/`require`/`from` edges in JS/TS and Python. You get complete, connected context — not orphaned snippets.
 
 ---
@@ -54,21 +54,23 @@ Works with **any** AI you already use — it's a companion to your existing chat
 | **Price** | free (your time) | varies | **free · Pro $9 once** |
 
 ### 🆓 Free tier
-- Single-file send
-- Basic project bundling (up to 50 files)
-- Standard prompts and ignore patterns
-- 🐛 Bundle Errors + 📥 Apply AI Reply
+- Project bundling up to **50 files per bundle**
+- **🐛 Bundle Errors + 📥 Apply AI Reply** — the full round-trip loop
+- All **4 output formats** (Standard, Claude XML, Compact, Minimal)
+- Visual file picker with live per-file token estimates
+- Open Tabs mode, Project Notes (persistent context), token + cost estimator
+- Context-window bars for ChatGPT / Claude / Gemini
+- `.gitignore` + `.sendtoaiignore` aware auto-ignore
 
 ### 💎 Pro tier ($9 lifetime)
-- **Unlimited** project bundling
-- Advanced token estimation & cost calculation
-- 4 output formats (Standard, XML, Compact, Minimal)
-- Git integration (bundle only changed files)
-- Advanced comment stripping & custom ignore patterns
-- Visual file-tree generation
-- Priority support
+- **Unlimited** files per bundle
+- **🔀 Git diff mode** — bundle only changed/staged files for AI code review
+- **🎯 Fit to AI Window** — auto-trim to your AI's context using relevance
+  ranking + dependency-graph awareness (keeps what matters, not the biggest files)
+- **📋 Named presets** (up to 10) — one-click reload of "backend only" etc.
+- All future Pro features included
 
-**[🚀 Upgrade — $9 lifetime](https://sendtoai.dev)** · No subscription. Use forever.
+**[🚀 Upgrade — $9 lifetime](https://sendtoai.dev)** · No subscription. 14-day money-back guarantee.
 
 ---
 
@@ -94,8 +96,7 @@ The fastest path — open the **SendToAI** view and click:
 - Bundle project, pick output format, set a token window, estimate cost
 
 ### Keyboard shortcuts
-- `Ctrl+Alt+A` (`Cmd+Alt+A`): Send current file
-- `Ctrl+Alt+B` (`Cmd+Alt+B`): Bundle entire project
+- `Ctrl+Alt+A` (`Cmd+Alt+A`) or `Ctrl+Alt+B` (`Cmd+Alt+B`): open the SendToAI panel, ready to bundle
 
 ### Command Palette
 `Ctrl+Shift+P` → type **"Send to AI"** → pick any command (including Bundle Errors / Apply AI Response).
