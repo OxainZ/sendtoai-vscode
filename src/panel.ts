@@ -50,8 +50,8 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
   public sendProStatus(isPro: boolean): void {
     this._view?.webview.postMessage({ command: 'proStatus', isPro });
   }
-  public showUpgradePrompt(): void {
-    this._view?.webview.postMessage({ command: 'showUpgrade' });
+  public showUpgradePrompt(reason: 'files' | 'git' | 'window' | 'presets' = 'files', fileCount?: number): void {
+    this._view?.webview.postMessage({ command: 'showUpgrade', reason, fileCount });
   }
 
   public resolveWebviewView(
@@ -446,7 +446,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
       <button class="btn-sm" data-act="confirmSavePreset">Save</button>
       <button class="btn-sm" data-act="cancelSavePreset">✕</button>
     </div>
-    <button class="btn-sm" id="savePresetBtn" data-act="showSavePreset" style="margin-top:4px">💾 Save Preset</button>
+    <button class="btn-sm" id="savePresetBtn" data-act="showSavePreset" style="margin-top:4px">💾 Save Preset <span class="pro-tag" style="font-size:8px;background:linear-gradient(135deg,#f7b733,#e07b39);color:#fff;padding:1px 4px;border-radius:6px;font-weight:800;vertical-align:middle;">PRO</span></button>
   </div>
 </div>
 
@@ -479,7 +479,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
 
 <!-- Target AI Window -->
 <div class="section">
-  <div class="section-label">Fit to AI Window <span style="font-size:9px;background:linear-gradient(135deg,#f7b733,#e07b39);color:#fff;padding:1px 5px;border-radius:8px;font-weight:800;vertical-align:middle;">PRO</span></div>
+  <div class="section-label">Fit to AI Window <span class="pro-tag" style="font-size:9px;background:linear-gradient(135deg,#f7b733,#e07b39);color:#fff;padding:1px 5px;border-radius:8px;font-weight:800;vertical-align:middle;">PRO</span></div>
   <select id="windowSelect">
     <option value="0">No limit (bundle all selected)</option>
     <option value="8000">ChatGPT Free — 8K tokens</option>
@@ -501,7 +501,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
 
 <!-- Upgrade Banner (shown when freemium gate fires) -->
 <div class="upgrade-banner" id="upgradeBanner">
-  <p>⚡ <strong>Pro feature</strong> — Free tier is limited to 50 files.<br>
+  <p id="upgradeMsg">⚡ <strong>Pro feature</strong> — Free tier is limited to 50 files.<br>
   Upgrade for unlimited files, presets, and git diff mode.</p>
   <button class="btn-upgrade" data-act="openUrl" data-arg="https://sendtoai.lemonsqueezy.com/checkout/buy/e8764352-b784-409e-8d59-c44fd9aad90c">Upgrade to Pro →</button>
   <button class="btn-upgrade" style="margin-top:6px;background:#444;" data-act="send" data-arg="enterLicenseKey">Already have a key? Activate it →</button>
@@ -901,6 +901,16 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
       document.getElementById('btnIcon').textContent = '📦';
       document.getElementById('btnLabel').textContent = 'Bundle to Clipboard';
       document.getElementById('shortcutHint').style.display = '';
+      // Contextual copy — say why THIS action needs Pro, with the user's real numbers
+      const msgs = {
+        files:   '⚡ <strong>That\\'s a Pro-size bundle</strong> — ' +
+                 (typeof d.fileCount === 'number' ? 'you selected <strong>' + d.fileCount + ' files</strong>; the' : 'the') +
+                 ' Free tier bundles up to 50.<br>Pro removes the limit — $9, once, yours forever.',
+        git:     '🔀 <strong>Git Changes is a Pro feature</strong> — bundle only what you changed, perfect for AI code review.<br>$9 once unlocks it (plus unlimited files, presets, and Fit to AI Window).',
+        window:  '🎯 <strong>Fit to AI Window is a Pro feature</strong> — auto-trims the bundle to your AI\\'s context, keeping the most relevant files.<br>$9 once unlocks it (plus unlimited files, git diff, and presets).',
+        presets: '📋 <strong>Named presets are a Pro feature</strong> — save this selection and reload it in one click.<br>$9 once unlocks presets, unlimited files, git diff, and Fit to AI Window.',
+      };
+      document.getElementById('upgradeMsg').innerHTML = msgs[d.reason] || msgs.files;
       document.getElementById('upgradeBanner').classList.add('show');
       document.getElementById('upgradeBanner').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       return;
@@ -910,6 +920,9 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
       const activateRow = document.getElementById('activateRow');
       badge.style.display = d.isPro ? 'inline' : 'none';
       if (activateRow) { activateRow.style.display = d.isPro ? 'none' : 'block'; }
+      // Hide PRO tags once licensed — the labels are an upsell, not a decoration
+      document.querySelectorAll('.pro-tag').forEach(t => { t.style.display = d.isPro ? 'none' : ''; });
+      if (d.isPro) { document.getElementById('upgradeBanner').classList.remove('show'); }
       return;
     }
     if (d.command === 'contextLoaded') {

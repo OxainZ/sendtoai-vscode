@@ -294,9 +294,24 @@ export function activate(context: vscode.ExtensionContext) {
   });
 
   panel.onSavePreset(async (name, paths) => {
+    // Named presets are Pro (advertised as such everywhere; the gate was
+    // missing). Loading/deleting existing presets stays free — no rug-pull
+    // for anyone who saved presets before the gate existed.
+    if (!cachedProStatus) {
+      panel.showUpgradePrompt('presets');
+      return;
+    }
     const presets = getPresets();
     const idx = presets.findIndex(p => p.name === name);
-    if (idx >= 0) { presets[idx] = { name, paths }; } else { presets.push({ name, paths }); }
+    if (idx >= 0) {
+      presets[idx] = { name, paths };
+    } else {
+      if (presets.length >= 10) {
+        vscode.window.showWarningMessage('SendToAI: Preset limit reached (10). Delete one to save a new preset.');
+        return;
+      }
+      presets.push({ name, paths });
+    }
     await context.globalState.update(presetsKey(), presets);
     panel.sendPresetsLoaded(presets);
   });
@@ -317,7 +332,19 @@ export function activate(context: vscode.ExtensionContext) {
 
     const isPro = cachedProStatus;
     if (req.mode === 'git' && !isPro) {
-      panel.showUpgradePrompt();
+      panel.showUpgradePrompt('git');
+      return;
+    }
+    // Fit to AI Window is a Pro feature (it was always labeled PRO in the UI,
+    // but the gate was missing — free users silently got it).
+    if (req.targetWindow > 0 && !isPro) {
+      panel.showUpgradePrompt('window');
+      return;
+    }
+    // Fast-fail the file limit BEFORE doing the bundling work: don't make a
+    // free user wait through a full 200-file read just to hit the paywall.
+    if (!isPro && req.mode === 'project' && req.selectedPaths && req.selectedPaths.size > PRO_FILE_LIMIT) {
+      panel.showUpgradePrompt('files', req.selectedPaths.size);
       return;
     }
 
@@ -337,7 +364,7 @@ export function activate(context: vscode.ExtensionContext) {
           );
 
           if (!isPro && res.fileCount > PRO_FILE_LIMIT) {
-            panel.showUpgradePrompt();
+            panel.showUpgradePrompt('files', res.fileCount);
             return null;
           }
           return res;
@@ -475,8 +502,14 @@ export function activate(context: vscode.ExtensionContext) {
       if (ok) { void maybeAskForReview(context); }
     }),
 
-    vscode.commands.registerCommand('sendtoai.upgradeToPro', () => {
-      vscode.env.openExternal(vscode.Uri.parse('https://sendtoai.lemonsqueezy.com/checkout/buy/e8764352-b784-409e-8d59-c44fd9aad90c'));
+    vscode.commands.registerCommand('sendtoai.upgradeToPro', async () => {
+      await vscode.env.openExternal(vscode.Uri.parse('https://sendtoai.lemonsqueezy.com/checkout/buy/e8764352-b784-409e-8d59-c44fd9aad90c'));
+      // Close the purchase→activation gap: the key arrives by email, and the
+      // buyer's next step should be one click away, not a Command Palette hunt.
+      const pick = await vscode.window.showInformationMessage(
+        'SendToAI: After checkout, your license key arrives by email within a minute.',
+        'I have my key — activate');
+      if (pick) { vscode.commands.executeCommand('sendtoai.enterLicenseKey'); }
     }),
 
     vscode.commands.registerCommand('sendtoai.enterLicenseKey', async () => {
@@ -517,8 +550,9 @@ export function activate(context: vscode.ExtensionContext) {
         } else if (!result.ok) {
           if (result.limitReached) {
             vscode.window.showErrorMessage(
-              'SendToAI: This license is already active on 5 machines. ' +
-              'Run "Deactivate License on This Machine" on another machine first.'
+              'SendToAI: This license has reached its activation limit. ' +
+              'Run "Deactivate License on This Machine" on another machine first, ' +
+              'or email support@sendtoai.dev for help.'
             );
           } else {
             vscode.window.showErrorMessage('SendToAI: License key is invalid or expired.');
@@ -549,7 +583,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       const confirm = await vscode.window.showWarningMessage(
-        'Deactivate SendToAI Pro on this machine? This frees up one of your 5 activation slots.',
+        'Deactivate SendToAI Pro on this machine? This frees up one of your activation slots.',
         { modal: true },
         'Deactivate',
       );

@@ -2,10 +2,11 @@
     "name": "sendtoai",
     "displayName": "Send to AI \u2014 Bundle Code & Errors for ChatGPT, Claude, Gemini",
     "description": "Bundle your errors + the connected code into one paste-ready block for any AI chat \u2014 then paste the reply back and apply the edits to your files. No API key. Free for up to 50 files; Pro unlocks unlimited bundling.",
-    "version": "3.9.1",
+    "version": "3.10.0",
     "publisher": "oxainz",
     "icon": "resources/icon.png",
     "license": "MIT",
+    "pricing": "Free",
     "galleryBanner": {
         "color": "#1e1e1e",
         "theme": "dark"
@@ -14,10 +15,9 @@
         "vscode": "^1.74.0"
     },
     "categories": [
+        "AI",
         "Machine Learning",
-        "Other",
-        "Snippets",
-        "Formatters"
+        "Other"
     ],
     "keywords": [
         "ai",
