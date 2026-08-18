@@ -1,5 +1,12 @@
 # 🚀 Send to AI — Task-Aware Code Bundling, Round-Trip
 
+[![Version](https://img.shields.io/visual-studio-marketplace/v/oxainz.sendtoai?label=marketplace&color=e07b39)](https://marketplace.visualstudio.com/items?itemName=oxainz.sendtoai)
+[![MIT License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+<!-- Uncomment once the numbers are worth showing (they render live from the marketplace):
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/oxainz.sendtoai)](https://marketplace.visualstudio.com/items?itemName=oxainz.sendtoai)
+[![Rating](https://img.shields.io/visual-studio-marketplace/stars/oxainz.sendtoai)](https://marketplace.visualstudio.com/items?itemName=oxainz.sendtoai&ssr=false#review-details)
+-->
+
 **Bundle your errors and the connected code for *any* AI, paste the answer back, apply it — no API key.**
 
 <img src="images/panel.png" alt="SendToAI panel: pick bundle mode, check files with live token estimates, choose prompt and output format, bundle to clipboard" width="480">
