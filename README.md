@@ -61,7 +61,7 @@ Works with **any** AI you already use — it's a companion to your existing chat
 | **Price** | free (your time) | varies | **free · Pro $9 once** |
 
 ### 🆓 Free tier
-- Project bundling up to **50 files per bundle**
+- Project bundling — bundles the **50 most relevant files** of any project (never a paywall: you always get a usable bundle, ranked by relevance to your task)
 - **🐛 Bundle Errors + 📥 Apply AI Reply** — the full round-trip loop
 - All **4 output formats** (Standard, Claude XML, Compact, Minimal)
 - Visual file picker with live per-file token estimates

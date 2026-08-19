@@ -14,8 +14,8 @@ Please do **not** open a public issue for security reports.
 
 | Version | Supported |
 |---------|-----------|
-| 3.7.x   | ✅ active |
-| < 3.7   | ❌ end of life |
+| 3.10.x  | ✅ active |
+| < 3.10  | ❌ end of life |
 
 ## Disclosure
 
