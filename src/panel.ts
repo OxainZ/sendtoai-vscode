@@ -53,6 +53,11 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
   public showUpgradePrompt(reason: 'files' | 'git' | 'window' | 'presets' = 'files', fileCount?: number): void {
     this._view?.webview.postMessage({ command: 'showUpgrade', reason, fileCount });
   }
+  /** Right-clicking a folder in the explorer should scope the picker to it
+   *  instead of silently selecting the whole workspace (2026-08-19 audit #8). */
+  public preselectFolder(rel: string): void {
+    this._view?.webview.postMessage({ command: 'preselectFolder', rel });
+  }
 
   public resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -646,6 +651,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
   // ── File-tree state ────────────────────────────────────────────────────────────
   let treeData   = null;
   let treeBuilt  = false;
+  let pendingPreselect = null;   // folder rel-path from an explorer right-click
   const collapsed = new Set();   // dir paths that are collapsed
   const checked   = new Set();   // file paths that are checked
 
@@ -704,6 +710,20 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
       if (add && !checked.has(p))  { checked.add(p);    selectedTokSum += (pathToTok.get(p) ?? 0); }
       if (!add && checked.has(p))  { checked.delete(p); selectedTokSum -= (pathToTok.get(p) ?? 0); }
     }
+  }
+
+  // Scope the selection to one folder (explorer right-click). Falls back to
+  // select-all when the folder yields nothing, so the picker is never empty.
+  function applyPreselect() {
+    const rel = pendingPreselect;
+    pendingPreselect = null;
+    if (!rel) { return; }
+    const all = fileDescendants(treeData);
+    const prefix = rel.replace(/\\/g, '/').replace(/\/+$/, '') + '/';
+    const inFolder = all.filter(p => p === rel || p.indexOf(prefix) === 0);
+    checked.clear();
+    selectedTokSum = 0;
+    checkPaths(inFolder.length ? inFolder : all, true);
   }
 
   function updateSummary() {
@@ -951,16 +971,25 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
       document.getElementById('deletePresetBtn').style.display = sel.value ? '' : 'none';
       return;
     }
+    if (d.command === 'preselectFolder') {
+      pendingPreselect = d.rel || null;
+      if (treeBuilt) { applyPreselect(); renderTree(); updateSummary(); }
+      return;
+    }
     if (d.command === 'scanResult') {
       treeData  = d.tree;
       pathToTok.clear();
       precomputeDescendants(treeData); // builds descCache, countCache, pathToTok in O(n)
       totalCount = totalFileCount(treeData);
       treeBuilt = true;
-      // Default: select all files
       checked.clear();
       selectedTokSum = 0;
-      checkPaths(fileDescendants(treeData), true);
+      if (pendingPreselect) {
+        applyPreselect();
+      } else {
+        // Default: select all files
+        checkPaths(fileDescendants(treeData), true);
+      }
       renderTree();
       updateSummary();
       return;

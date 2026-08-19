@@ -1,7 +1,7 @@
 {
     "name": "sendtoai",
-    "displayName": "Send to AI \u2014 Bundle Code & Errors for ChatGPT, Claude, Gemini",
-    "description": "Bundle your errors + the connected code into one paste-ready block for any AI chat \u2014 then paste the reply back and apply the edits to your files. No API key. Free for up to 50 files; Pro unlocks unlimited bundling.",
+    "displayName": "Send to AI \u2014 Copy Your Whole Project or Codebase into ChatGPT, Claude & Gemini",
+    "description": "Copy your entire project, codebase or repo context into any AI chat in one click. Bundle your errors + the connected code into one paste-ready block \u2014 then paste the reply back and apply the edits to your files. No API key. Free tier bundles the 50 most relevant files; Pro bundles the whole project.",
     "version": "3.10.0",
     "publisher": "oxainz",
     "icon": "resources/icon.png",
@@ -171,13 +171,15 @@
     "scripts": {
         "vscode:prepublish": "npm run compile",
         "compile": "tsc -p ./",
-        "watch": "tsc -watch -p ./"
+        "watch": "tsc -watch -p ./",
+        "publish:ovsx": "npx ovsx publish -p $OVSX_TOKEN"
     },
     "devDependencies": {
         "@types/node": "16.x",
         "@types/vscode": "^1.74.0",
         "@vscode/vsce": "^3.9.1",
-        "typescript": "^4.9.4"
+        "typescript": "^4.9.4",
+        "ovsx": "^0.10.1"
     },
     "overrides": {
         "undici": ">=7.28.0",

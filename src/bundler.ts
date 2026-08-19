@@ -425,6 +425,10 @@ export interface BundleResult {
   tokenEstimate: number;
   folderName:    string;
   fileTypes:     Record<string, number>;
+  /** Set when a free-tier file cap trimmed the selection: how many files the
+   *  user actually selected. The bundle still contains the most RELEVANT
+   *  `fileCount` of them — never a paywall, always a usable bundle. */
+  trimmedFrom?:  number;
 }
 
 export function estimateTokens(text: string): number {
@@ -536,6 +540,7 @@ export async function buildBundle(
   selectedPaths?: Set<string>,
   contextBlock?: string,
   tokenLimit = 0,
+  maxFiles = 0,
 ): Promise<BundleResult> {
   const rootPath  = rootUri.fsPath;
   const folderName = path.basename(rootPath);
@@ -658,6 +663,46 @@ export async function buildBundle(
     const batch = included.slice(i, i + CONCURRENCY);
     const results = await Promise.all(batch.map(readOne));
     fileContents.push(...results);
+  }
+
+  // ── Free-tier cap: keep the N MOST RELEVANT files, never a paywall ──────────
+  // A free user's first click used to hit an upgrade prompt and produce NOTHING
+  // (the tree defaults to select-all, so any real repo trips the cap instantly).
+  // Blocking the first bundle is how you lose a user before they see the value.
+  // Instead: bundle the most relevant `maxFiles` and say so. The user gets a
+  // working bundle AND a live demonstration of the relevance ranking that Pro
+  // applies to the whole project.
+  let trimmedFrom: number | undefined;
+  if (maxFiles > 0 && fileContents.length > maxFiles) {
+    trimmedFrom = fileContents.length;
+    const terms = extractQueryTerms(userPrompt);
+    const known = new Set(fileContents.map(f => f.rel));
+    const base = new Map<string, number>(
+      fileContents.map(f => [f.rel, scoreRelevance(f.rel, f.content, terms)] as const)
+    );
+    const finalScore = new Map(base);
+    for (const f of fileContents) {
+      const imp = base.get(f.rel) ?? 0;
+      if (imp <= 0) { continue; }
+      for (const spec of extractImports(f.content, path.extname(f.rel).toLowerCase())) {
+        const dep = resolveImport(f.rel, spec, known);
+        if (dep) { finalScore.set(dep, (finalScore.get(dep) ?? 0) + Math.min(imp, 12) * 0.5); }
+      }
+    }
+    const keptSet = fileContents
+      .map(f => ({ f, score: finalScore.get(f.rel) ?? 0 }))
+      .sort((a, b) => (b.score - a.score) || (a.f.content.length - b.f.content.length))
+      .slice(0, maxFiles);
+    ignoredCount += fileContents.length - keptSet.length;
+    const keptRelsCap = new Set(keptSet.map(k => k.f.rel));
+    const orderedKept = fileContents.filter(f => keptRelsCap.has(f.rel));
+    fileContents.splice(0, fileContents.length, ...orderedKept);
+    included = included.filter(uri =>
+      keptRelsCap.has(path.relative(rootPath, uri.fsPath).replace(/\\/g, '/')));
+    treeRoot = { dirs: new Map(), files: [] };
+    for (const uri of included) {
+      addToTree(treeRoot, path.relative(rootPath, uri.fsPath).replace(/\\/g, '/').split('/'));
+    }
   }
 
   // ── Fit-to-window: trim files largest-first until assembled bundle fits limit ──
@@ -842,5 +887,5 @@ export async function buildBundle(
     `${tokenEstimate.toLocaleString()} (~${cost.haiku} Haiku · ${cost.sonnet} Sonnet · ${cost.opus} Opus)`
   );
 
-  return { bundle, fileCount: included.length, ignoredCount, tokenEstimate, folderName, fileTypes };
+  return { bundle, fileCount: included.length, ignoredCount, tokenEstimate, folderName, fileTypes, trimmedFrom };
 }

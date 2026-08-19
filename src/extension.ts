@@ -6,7 +6,14 @@ import { buildBundle, scanProjectTree } from './bundler';
 import { estimateCost } from './costEstimator';
 
 const PRO_FILE_LIMIT = 50;
-const PRODUCT_ID = 926714;
+// Accept a SET of product ids, not one hardcoded number (2026-08-19 audit #13):
+// creating a new LemonSqueezy product/variant for a price change would otherwise
+// make every new buyer's key fail to activate, silently, on the day of the change.
+// Add the new id here BEFORE changing pricing; keep the old one so existing
+// customers keep validating forever.
+const PRODUCT_IDS = new Set<number>([926714]);
+const isOurProduct = (id: unknown): boolean =>
+  typeof id === 'number' && PRODUCT_IDS.has(id);
 const CACHE_TTL_MS        = 24 * 60 * 60 * 1000;
 const WARN_AFTER_MS       = 30 * 24 * 60 * 60 * 1000;
 const HARD_BLOCK_AFTER_MS = 365 * 24 * 60 * 60 * 1000;
@@ -68,7 +75,7 @@ async function activateLicense(key: string, context: vscode.ExtensionContext): P
     const instanceName = `vscode-${vscode.env.machineId.slice(0, 16)}`;
     const json = await lsPost('/v1/licenses/activate', { license_key: key, instance_name: instanceName });
 
-    if (json.activated !== true || json.meta?.product_id !== PRODUCT_ID) {
+    if (json.activated !== true || !isOurProduct(json.meta?.product_id)) {
       const limitReached = typeof json.error === 'string' && json.error.toLowerCase().includes('activation limit');
       return { ok: false, limitReached };
     }
@@ -99,7 +106,7 @@ async function checkLicenseRemote(key: string, context: vscode.ExtensionContext)
       instance_id: stored.instanceId,
     });
 
-    if (json.valid !== true || json.meta?.product_id !== PRODUCT_ID) {
+    if (json.valid !== true || !isOurProduct(json.meta?.product_id)) {
       // Instance no longer exists (secrets from old install, etc.) — re-activate
       if (typeof json.error === 'string' && json.error.toLowerCase().includes('instance')) {
         await context.secrets.delete(SECRETS_KEY);
@@ -217,7 +224,7 @@ async function maybeAskForReview(context: vscode.ExtensionContext): Promise<void
     if (context.globalState.get<boolean>('reviewAskDone')) { return; }
     const n = (context.globalState.get<number>('successCount') ?? 0) + 1;
     await context.globalState.update('successCount', n);
-    const askAt = context.globalState.get<number>('reviewAskAt') ?? 5;
+    const askAt = context.globalState.get<number>('reviewAskAt') ?? 3;
     if (n < askAt) { return; }
     const pick = await vscode.window.showInformationMessage(
       `SendToAI has bundled for you ${n} times — if it's saving you time, a Marketplace review really helps a small extension get found.`,
@@ -341,12 +348,13 @@ export function activate(context: vscode.ExtensionContext) {
       panel.showUpgradePrompt('window');
       return;
     }
-    // Fast-fail the file limit BEFORE doing the bundling work: don't make a
-    // free user wait through a full 200-file read just to hit the paywall.
-    if (!isPro && req.mode === 'project' && req.selectedPaths && req.selectedPaths.size > PRO_FILE_LIMIT) {
-      panel.showUpgradePrompt('files', req.selectedPaths.size);
-      return;
-    }
+    // NOTE (2026-08-19 conversion audit): there used to be a hard paywall here.
+    // The file tree defaults to select-all, so on any real repo a brand-new
+    // free user's FIRST click produced an upgrade prompt and zero output — the
+    // worst possible first run. Now the free tier bundles the PRO_FILE_LIMIT
+    // most-relevant files instead (see buildBundle's maxFiles), which delivers
+    // a usable bundle AND demonstrates the relevance ranking Pro applies to
+    // the whole project. Ask for money after proving value, never before.
 
     panel.setBusy(true);
     try {
@@ -361,12 +369,8 @@ export function activate(context: vscode.ExtensionContext) {
             root, progress, token,
             req.mode, req.format, req.prompt,
             req.selectedPaths, contextBlock, req.targetWindow,
+            isPro ? 0 : PRO_FILE_LIMIT,
           );
-
-          if (!isPro && res.fileCount > PRO_FILE_LIMIT) {
-            panel.showUpgradePrompt('files', res.fileCount);
-            return null;
-          }
           return res;
         }
       );
@@ -375,9 +379,19 @@ export function activate(context: vscode.ExtensionContext) {
 
       await vscode.env.clipboard.writeText(result.bundle);
       panel.updateStats(result, estimateCost(result.tokenEstimate));
-      vscode.window.showInformationMessage(
-        `\u2705 Copied! ${result.fileCount} files \u00b7 ~${result.tokenEstimate.toLocaleString()} tokens`
-      );
+      if (result.trimmedFrom) {
+        // Value first, then the ask — and state plainly what was done, so the
+        // free bundle is never silently partial.
+        void vscode.window.showInformationMessage(
+          `\u2705 Copied the ${result.fileCount} most relevant of your ${result.trimmedFrom} files ` +
+          `\u00b7 ~${result.tokenEstimate.toLocaleString()} tokens. Pro bundles all of them.`,
+          'See Pro'
+        ).then(pick => { if (pick === 'See Pro') { panel.showUpgradePrompt('files', result.trimmedFrom); } });
+      } else {
+        vscode.window.showInformationMessage(
+          `\u2705 Copied! ${result.fileCount} files \u00b7 ~${result.tokenEstimate.toLocaleString()} tokens`
+        );
+      }
       void maybeAskForReview(context);
 
       if (vscode.workspace.getConfiguration('sendtoai').get<boolean>('autoOpenAI')) {
@@ -393,10 +407,43 @@ export function activate(context: vscode.ExtensionContext) {
 
   // ── Commands ──────────────────────────────────────────────────────────────
   context.subscriptions.push(
-    vscode.commands.registerCommand('sendtoai.sendToAI', () => {
-      vscode.commands.executeCommand('sendtoai.panel.focus');
+    // These two are the highest-traffic discovery paths (explorer right-click
+    // and the keybinding). Both used to just focus the sidebar and do nothing,
+    // while the README and the landing page promised they would bundle — a
+    // silent first-run disappointment. They now do the advertised thing.
+    vscode.commands.registerCommand('sendtoai.sendToAI', async (uri?: vscode.Uri) => {
+      const ed = vscode.window.activeTextEditor;
+      const target = uri ?? ed?.document.uri;
+      if (!target) { vscode.commands.executeCommand('sendtoai.panel.focus'); return; }
+      try {
+        const stat = await vscode.workspace.fs.stat(target);
+        if (stat.type === vscode.FileType.Directory) {
+          vscode.commands.executeCommand('sendtoai.panel.focus');
+          return;
+        }
+        // A non-empty selection means "send just this" — the fastest possible path.
+        const sel = ed && !ed.selection.isEmpty && ed.document.uri.toString() === target.toString()
+          ? ed.document.getText(ed.selection)
+          : Buffer.from(await vscode.workspace.fs.readFile(target)).toString('utf8');
+        const rel = vscode.workspace.asRelativePath(target);
+        await vscode.env.clipboard.writeText(`FILE: ${rel}\n\n${sel}`);
+        vscode.window.showInformationMessage(
+          `\u2705 Copied ${rel} \u00b7 ~${Math.ceil(sel.length / 4).toLocaleString()} tokens`);
+        void maybeAskForReview(context);
+      } catch {
+        vscode.commands.executeCommand('sendtoai.panel.focus');
+      }
     }),
-    vscode.commands.registerCommand('sendtoai.bundleProject', () => {
+    vscode.commands.registerCommand('sendtoai.bundleProject', async (uri?: vscode.Uri) => {
+      // Right-clicking a folder should scope the picker to that folder.
+      if (uri) {
+        try {
+          const stat = await vscode.workspace.fs.stat(uri);
+          if (stat.type === vscode.FileType.Directory) {
+            panel.preselectFolder(vscode.workspace.asRelativePath(uri));
+          }
+        } catch { /* fall through to a plain focus */ }
+      }
       vscode.commands.executeCommand('sendtoai.panel.focus');
     }),
 
