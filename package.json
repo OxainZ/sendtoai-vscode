@@ -1,8 +1,8 @@
 {
     "name": "sendtoai",
     "displayName": "Send to AI — Copy Codebase to ChatGPT, Claude & Gemini",
-    "description": "Copy your codebase into ChatGPT, Claude or Gemini in one paste, then apply the AI's edits back to your files. Bundles the errors from the Problems panel with the code they point at. No API key, no telemetry, nothing leaves your machine. Free: the 50 most relevant files. Pro ($9.99 once): the whole project.",
-    "version": "3.15.2",
+    "description": "Copy your codebase into ChatGPT, Claude or Gemini in one paste, then apply the AI's edits back to your files. Bundles the errors from the Problems panel with the code they point at. No API key, no telemetry, nothing leaves your machine. Free: the 50 most relevant files. Pro ($14.99 once): the whole project.",
+    "version": "3.15.3",
     "publisher": "oxainz",
     "icon": "resources/icon.png",
     "license": "MIT",
@@ -106,7 +106,7 @@
             },
             {
                 "command": "sendtoai.upgradeToPro",
-                "title": "💎 Upgrade to Pro ($9.99 lifetime)",
+                "title": "💎 Upgrade to Pro ($14.99 lifetime)",
                 "category": "Send to AI"
             },
             {
