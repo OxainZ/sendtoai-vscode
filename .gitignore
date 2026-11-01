@@ -11,3 +11,5 @@ out/
 # Local research and audit output — contains business/security notes
 research_notes/
 reports/
+test/fixtures/sample/dist/
+test/fixtures/sample/big.csv

@@ -477,7 +477,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // ── Bundle ────────────────────────────────────────────────────────────────
   let bundling = false;
-  panel.onBundleRequest(async (req: PanelRequest) => {
+  const handleBundle = async (req: PanelRequest) => {
     const root = resolveRoot();
     if (!root) {
       vscode.window.showErrorMessage('SendToAI: No workspace folder open.');
@@ -558,7 +558,8 @@ export function activate(context: vscode.ExtensionContext) {
       bundling = false;
       panel.setBusy(false);
     }
-  });
+  };
+  panel.onBundleRequest(handleBundle);
 
   // ── Commands ──────────────────────────────────────────────────────────────
   context.subscriptions.push(
@@ -884,6 +885,20 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
   );
+
+  // Hooks for the end-to-end test (test/e2e). Not part of the public API.
+  return {
+    _test: {
+      scan: async () => {
+        const r = resolveRoot();
+        if (!r) { throw new Error('no workspace folder'); }
+        return scanProjectTree(r);
+      },
+      bundle: handleBundle,
+      inbound: () => panel.inbound,
+      isPro: () => cachedProStatus,
+    },
+  };
 }
 
 export function deactivate() {}
