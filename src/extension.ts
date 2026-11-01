@@ -217,12 +217,28 @@ async function checkLicenseRemote(key: string, context: vscode.ExtensionContext)
 
 let cachedProStatus = false;
 
+// ── Workspace root ────────────────────────────────────────────────────────────
+// Multi-root workspaces used to be silently reduced to the first folder. Now:
+// one folder → that folder; several → the folder that owns the active editor,
+// else the folder used last, else the first. Notes and presets follow the root.
+let lastRoot: vscode.Uri | undefined;
+function resolveRoot(): vscode.Uri | undefined {
+  const folders = vscode.workspace.workspaceFolders ?? [];
+  if (folders.length === 0) { lastRoot = undefined; return undefined; }
+  if (folders.length === 1) { lastRoot = folders[0].uri; return lastRoot; }
+  const active = vscode.window.activeTextEditor?.document.uri;
+  const owner = active && active.scheme === 'file' ? vscode.workspace.getWorkspaceFolder(active)?.uri : undefined;
+  const previous = lastRoot && folders.some(f => f.uri.toString() === lastRoot?.toString()) ? lastRoot : undefined;
+  lastRoot = owner ?? previous ?? folders[0].uri;
+  return lastRoot;
+}
+
 function getLicenseKey(): string {
   return vscode.workspace.getConfiguration('sendtoai').get<string>('licenseKey') ?? '';
 }
 
 function workspaceKey(suffix: string): string {
-  const root = (vscode.workspace.workspaceFolders?.[0]?.uri?.fsPath ?? 'global').replace(/\\/g, '/');
+  const root = (resolveRoot()?.fsPath ?? 'global').replace(/\\/g, '/');
   return `sendtoai.${root}.${suffix}`;
 }
 
@@ -381,8 +397,8 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   // ── Scan ──────────────────────────────────────────────────────────────────
-  panel.onScanRequest(async () => {
-    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+  const rescan = async () => {
+    const root = resolveRoot();
     if (!root) {
       // No folder open: answer with an empty tree so the panel stops spinning
       panel.updateTree({ name: '', path: '', isDir: true, tokenEst: 0, children: [] });
@@ -394,7 +410,9 @@ export function activate(context: vscode.ExtensionContext) {
     } catch (e) {
       vscode.window.showErrorMessage(`SendToAI: scan failed — ${e}`);
     }
-  });
+  };
+  panel.onScanRequest(rescan);
+  context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => { void rescan(); }));
 
   // ── Context (project notes) ───────────────────────────────────────────────
   panel.onLoadContext(() => {
@@ -446,10 +464,22 @@ export function activate(context: vscode.ExtensionContext) {
     panel.sendPresetsLoaded(presets);
   });
 
+  // In a multi-root workspace, switching to an editor in another folder
+  // re-targets the panel: tree, notes and presets all follow that folder.
+  context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => {
+    if ((vscode.workspace.workspaceFolders?.length ?? 0) < 2) { return; }
+    const before = lastRoot?.toString();
+    const after = resolveRoot()?.toString();
+    if (before === after) { return; }
+    void rescan();
+    panel.sendContextLoaded(context.globalState.get<string>(workspaceKey('notes')) ?? '');
+    panel.sendPresetsLoaded(getPresets());
+  }));
+
   // ── Bundle ────────────────────────────────────────────────────────────────
   let bundling = false;
   panel.onBundleRequest(async (req: PanelRequest) => {
-    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+    const root = resolveRoot();
     if (!root) {
       vscode.window.showErrorMessage('SendToAI: No workspace folder open.');
       return;
@@ -575,7 +605,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // ── #3 Error-driven bundling — uses VS Code's diagnostics (web bundlers can't) ──
     vscode.commands.registerCommand('sendtoai.bundleErrors', async () => {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+      const root = resolveRoot();
       if (!root) { vscode.window.showErrorMessage('SendToAI: No workspace folder open.'); return; }
       const rootPath = root.fsPath;
       const errorFiles = new Set<string>();
@@ -624,7 +654,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // ── #4 Round-trip — paste the AI's reply back, apply edits as reviewable changes ──
     vscode.commands.registerCommand('sendtoai.applyResponse', async () => {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+      const root = resolveRoot();
       if (!root) { vscode.window.showErrorMessage('SendToAI: No workspace folder open.'); return; }
       if (!vscode.workspace.isTrusted) {
         vscode.window.showWarningMessage('SendToAI: Apply AI Reply writes files, so it is disabled in Restricted Mode. Trust this workspace to use it.');
