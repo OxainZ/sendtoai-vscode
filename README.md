@@ -78,7 +78,7 @@ Works with **any** AI you already use — it's a companion to your existing chat
 - Use it on up to **5 machines** — run *Deactivate License on This Machine* to move a slot
 - All future Pro features included
 
-**[🚀 Upgrade — $9.99 lifetime](https://sendtoai.dev)** · plus VAT where applicable · No subscription. 14-day money-back guarantee.
+**[🚀 Upgrade — $9.99 lifetime](https://sendtoai.dev)** · plus VAT where applicable · No subscription. 30-day money-back guarantee.
 
 ---
 
@@ -173,7 +173,7 @@ Output formats include an **XML** mode tuned for Claude and structured analysis,
 - 🌐 **Website**: [sendtoai.dev](https://sendtoai.dev)
 - 🐛 **Found a bug?** [Open an issue](https://github.com/OxainZ/sendtoai-vscode/issues)
 - 💬 **Need help?** support@sendtoai.dev
-- 💳 **Billing & refunds**: 14-day no-questions refund — email support@sendtoai.dev with your order number. Purchases are processed by Lemon Squeezy, so your receipt and card statement say **"Sold through Link, LLC"**
+- 💳 **Billing & refunds**: 30-day no-questions refund — email support@sendtoai.dev with your order number. Purchases are processed by Lemon Squeezy, so your receipt and card statement say **"Sold through Link, LLC"**
 - ⭐ **Love it?** [Rate it 5 stars](https://marketplace.visualstudio.com/items?itemName=oxainz.sendtoai&ssr=false#review-details)
 
 ## 📄 License

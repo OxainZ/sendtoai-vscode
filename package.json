@@ -123,6 +123,16 @@
                 "command": "sendtoai.showLicenseActivity",
                 "title": "📜 Show License Activity",
                 "category": "Send to AI"
+            },
+            {
+                "command": "sendtoai.saveBundle",
+                "title": "💾 Save Bundle as .txt",
+                "category": "Send to AI"
+            },
+            {
+                "command": "sendtoai.rateExtension",
+                "title": "⭐ Rate Send to AI",
+                "category": "Send to AI"
             }
         ],
         "keybindings": [

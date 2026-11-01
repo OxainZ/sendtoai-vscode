@@ -355,7 +355,7 @@
         presets: '📋 <strong>Named presets are a Pro feature</strong> — save this selection and reload it in one click.<br>$9.99 once unlocks presets, unlimited files, git diff, and Fit to AI Window.',
       };
       document.getElementById('upgradeMsg').innerHTML = (msgs[d.reason] || msgs.files) +
-        '<br><span style="opacity:.75">14-day money-back guarantee · one license works on up to 5 machines</span>';
+        '<br><span style="opacity:.75">30-day money-back guarantee · one license works on up to 5 machines</span>';
       document.getElementById('upgradeBanner').classList.add('show');
       document.getElementById('upgradeBanner').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       return;
@@ -425,6 +425,9 @@
     document.getElementById('projName').textContent = '📁 ' + d.folderName;
     document.getElementById('fc').textContent = d.fileCount.toLocaleString();
     document.getElementById('ic').textContent = d.ignoredCount.toLocaleString();
+    document.getElementById('trimNote').textContent = d.trimmedFrom
+      ? 'Free tier: ' + d.fileCount + ' of your ' + d.trimmedFrom + ' relevant files included · Pro bundles all of them'
+      : '';
     document.getElementById('tk').textContent = '~' + (d.tokenEstimate >= 1000
       ? (d.tokenEstimate / 1000).toFixed(1) + 'k'
       : d.tokenEstimate.toLocaleString());

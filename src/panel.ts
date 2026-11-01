@@ -143,6 +143,9 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
         case 'applyResponse':
           vscode.commands.executeCommand('sendtoai.applyResponse');
           break;
+        case 'saveBundle':
+          vscode.commands.executeCommand('sendtoai.saveBundle');
+          break;
       }
     });
   }
@@ -162,6 +165,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
       opus:          cost.opus,
       bundleTooBig,
       fileTypes:     result.fileTypes,
+      trimmedFrom:   result.trimmedFrom,
       timestamp:     new Date().toLocaleTimeString(),
     });
   }
@@ -347,6 +351,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
     <div class="stat-row"><span class="stat-lbl">Files included</span><span class="stat-val" id="fc">—</span></div>
     <div class="stat-row"><span class="stat-lbl">Files ignored</span><span class="stat-val" id="ic">—</span></div>
     <div class="stat-row"><span class="stat-lbl">Est. tokens</span><span class="stat-val" id="tk">—</span></div>
+    <div class="hint" id="trimNote"></div>
   </div>
   <div class="progress-wrap">
     <div class="ctx-row"><span class="ctx-lbl">ChatGPT Free</span><span class="ctx-limit">27K</span><span class="ctx-pct" id="pctGptFree">0%</span></div>
@@ -372,6 +377,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
   </div>
   <div id="warnBox" style="display:none" class="warn">⚠️ Large bundle — ChatGPT and Claude attach pastes over ~5K characters as a file; 1M context needs a paid Claude (Sonnet/Opus 5.x) or Gemini AI Pro plan, or use Fit to AI Window</div>
   <button class="btn-copy" data-act="send" data-arg="copyAgain">📋 Copy Again</button>
+  <button class="btn-copy" data-act="send" data-arg="saveBundle" title="Save the last bundle as a .txt to attach in your AI chat">💾 Save as .txt</button>
   <p class="timestamp" id="ts"></p>
 </div>
 

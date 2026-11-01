@@ -5,6 +5,7 @@ import * as os from 'os';
 import * as crypto from 'crypto';
 import { SendToAIPanel, PanelRequest } from './panel';
 import { buildBundle, scanProjectTree } from './bundler';
+import { parseReply, applySearchReplace } from './reply';
 import { estimateCost } from './costEstimator';
 
 const PRO_FILE_LIMIT = 50;
@@ -307,41 +308,8 @@ async function refreshLicense(
   return remote;
 }
 
-// ── Round-trip: parse an AI chat reply into editable file blocks ──────────────
-// Recognizes a file path from the fence info string (```ts src/a.ts) or a line
-// just before the fence (**src/a.ts**, `src/a.ts`, File: src/a.ts, // src/a.ts).
-export function extractPathToken(s: string): string {
-  const cleaned = s.replace(/\\/g, '/').replace(/[*`>#]/g, '').replace(/^\s*(?:file|path)\s*:/i, '').trim();
-  const m = cleaned.match(/([\w][\w./-]*\.[A-Za-z][A-Za-z0-9]{0,7})\b/);
-  return m ? m[1] : '';
-}
-
-export function parseFileBlocks(text: string): { path: string; content: string }[] {
-  const out: { path: string; content: string }[] = [];
-  const lines = text.split(/\r?\n/);
-  let pending = '';
-  for (let i = 0; i < lines.length; i++) {
-    const fence = lines[i].match(/^\s*```(.*)$/);
-    if (fence) {
-      const p = extractPathToken(fence[1]) || pending;
-      i++;
-      const buf: string[] = [];
-      while (i < lines.length && !/^\s*```/.test(lines[i])) { buf.push(lines[i]); i++; }
-      if (p) { out.push({ path: p, content: buf.join('\n') }); }
-      pending = '';
-      continue;
-    }
-    const line = lines[i];
-    if (line.trim() === '') { continue; } // blank lines keep a pending label alive
-    const tok = extractPathToken(line);
-    // Only a line that is essentially JUST the path counts as a label
-    // (**src/a.ts**, `src/a.ts`, File: src/a.ts). A prose sentence that happens
-    // to contain "e.g." or "Node.js" must never become a target file.
-    const cleaned = line.replace(/[*`>#]/g, '').replace(/^\s*(?:file|path)\s*:/i, '').trim();
-    pending = (tok && cleaned.length <= tok.length + 24) ? tok : '';
-  }
-  return out;
-}
+// Reply parsing lives in src/reply.ts (pure, unit-tested). Re-exported for tests.
+export { extractPathToken, parseFileBlocks } from './reply';
 
 // ── Extension entry point ─────────────────────────────────────────────────────
 
@@ -355,9 +323,9 @@ async function maybeAskForReview(context: vscode.ExtensionContext): Promise<void
     const askAt = context.globalState.get<number>('reviewAskAt') ?? 5;
     if (n < askAt) { return; }
     const pick = await vscode.window.showInformationMessage(
-      `SendToAI has bundled for you ${n} times — if it's saving you time, a Marketplace review really helps a small extension get found.`,
-      '⭐ Rate it', 'Later', "Don't ask again");
-    if (pick === '⭐ Rate it') {
+      `Send to AI has worked ${n} times for you. Would you rate it on the Marketplace? Honest reviews are how a small extension gets found.`,
+      'Rate on Marketplace', 'Later', "Don't ask again");
+    if (pick === 'Rate on Marketplace') {
       vscode.env.openExternal(vscode.Uri.parse(REVIEW_URL));
       await context.globalState.update('reviewAskDone', true);
     } else if (pick === "Don't ask again") {
@@ -371,6 +339,9 @@ async function maybeAskForReview(context: vscode.ExtensionContext): Promise<void
 
 export function activate(context: vscode.ExtensionContext) {
   const panel = new SendToAIPanel(context.extensionUri);
+  const previewStore = new Map<string, string>();
+  const previewEmitter = new vscode.EventEmitter<vscode.Uri>();
+  context.subscriptions.push(previewEmitter);
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(SendToAIPanel.viewType, panel, {
@@ -477,6 +448,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // ── Bundle ────────────────────────────────────────────────────────────────
   let bundling = false;
+  let lastBundle: { text: string; folderName: string } | undefined;
   const handleBundle = async (req: PanelRequest) => {
     const root = resolveRoot();
     if (!root) {
@@ -532,6 +504,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (!result) { return; }
 
       await vscode.env.clipboard.writeText(result.bundle);
+      lastBundle = { text: result.bundle, folderName: result.folderName };
       panel.updateStats(result, estimateCost(result.tokenEstimate));
       if (result.trimmedFrom) {
         // Value first, then the ask — and state plainly what was done, so the
@@ -638,6 +611,7 @@ export function activate(context: vscode.ExtensionContext) {
         );
         if (!result) { return; }
         await vscode.env.clipboard.writeText(result.bundle);
+        lastBundle = { text: result.bundle, folderName: result.folderName };
         vscode.window.showInformationMessage(
           `✅ Copied! ${errorFiles.size} file(s) with problems + ${problemLines.length} diagnostics · ~${result.tokenEstimate.toLocaleString()} tokens. Paste into your AI.`);
         void maybeAskForReview(context);
@@ -661,38 +635,53 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
       const clip = await vscode.env.clipboard.readText();
-      const blocks = parseFileBlocks(clip);
-      if (blocks.length === 0) {
+      const replyEdits = parseReply(clip);
+      if (replyEdits.length === 0) {
         vscode.window.showWarningMessage(
-          'SendToAI: No file code-blocks found on the clipboard. Copy the AI\'s FULL reply — not just the chat\'s "copy code" button — so the file path and ``` fences are included, then run this again.');
+          'SendToAI: No file edits found on the clipboard. Copy the AI\'s FULL reply — not just the chat\'s "copy code" button — so the file paths and ``` fences (or SEARCH/REPLACE blocks) are included, then run this again.');
         return;
       }
-      const byPath = new Map<string, string>();
-      for (const b of blocks) {
+      // Group by path; a full-file block replaces earlier edits for that path,
+      // SEARCH/REPLACE blocks for the same path accumulate.
+      const byPath = new Map<string, { full?: string; sr: { search: string; replace: string }[] }>();
+      for (const e of replyEdits) {
         // Clipboard content is untrusted — never let a path escape the workspace root
-        const norm = path.posix.normalize(b.path);
+        const norm = path.posix.normalize(e.path);
         if (path.posix.isAbsolute(norm) || norm === '..' || norm.startsWith('../')) { continue; }
-        byPath.set(norm, b.content);
+        const entry = byPath.get(norm) ?? { sr: [] };
+        if (e.kind === 'full') { entry.full = e.content; entry.sr = []; }
+        else { entry.sr.push(...e.edits); }
+        byPath.set(norm, entry);
       }
       if (byPath.size === 0) {
         vscode.window.showWarningMessage('SendToAI: All file paths in the reply point outside the workspace — nothing to apply.');
         return;
       }
       const rootFs = root.fsPath.replace(/[\\/]+$/, '');
-      const candidates = await Promise.all([...byPath.entries()].map(async ([p, c]) => {
+      const candidates = await Promise.all([...byPath.entries()].map(async ([p, entry]) => {
         const uri = vscode.Uri.joinPath(root, p);
         // Belt and braces: the resolved path must still live under the workspace
         const rel = path.relative(rootFs, uri.fsPath);
         if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) { return null; }
         let exists = true;
-        try { await vscode.workspace.fs.stat(uri); } catch { exists = false; }
+        let current = '';
+        try { current = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8'); } catch { exists = false; }
         const sensitive = SENSITIVE_WRITE_RE.test(p);
         const flag = sensitive ? ' · ⚠ review before applying' : '';
-        return { label: p, description: `${c.split('\n').length} lines · ${exists ? 'modify' : 'new file'}${flag}`, picked: !sensitive, p, c };
+        if (entry.full !== undefined) {
+          const c = entry.full;
+          return { label: p, description: `${c.split('\n').length} lines · ${exists ? 'replace whole file' : 'new file'}${flag}`, picked: !sensitive, p, c };
+        }
+        if (!exists) {
+          return { label: p, description: 'SEARCH/REPLACE for a file that does not exist · skipped', picked: false, p, c: '' };
+        }
+        const r = applySearchReplace(current, entry.sr);
+        const bad = r.failed.length ? ` · ⚠ ${r.failed.length} of ${entry.sr.length} not found: ${r.failed[0]}` : '';
+        return { label: p, description: `${r.applied} replacement(s)${bad}${flag}`, picked: !sensitive && r.failed.length === 0 && r.applied > 0, p, c: r.content };
       }));
-      const items = candidates.filter((it): it is NonNullable<typeof it> => it !== null);
+      const items = candidates.filter((it): it is NonNullable<typeof it> => it !== null && it.c !== '' );
       if (items.length === 0) {
-        vscode.window.showWarningMessage('SendToAI: All file paths in the reply point outside the workspace — nothing to apply.');
+        vscode.window.showWarningMessage('SendToAI: Nothing applicable in the reply (paths outside the workspace, or SEARCH blocks for files that do not exist).');
         return;
       }
       const picked = await vscode.window.showQuickPick(items, {
@@ -701,6 +690,27 @@ export function activate(context: vscode.ExtensionContext) {
         placeHolder: 'Select files to write — undoable with Ctrl+Z and visible in git',
       });
       if (!picked || picked.length === 0) { return; }
+
+      // Optional diff preview before anything is written
+      const choice = await vscode.window.showQuickPick(
+        [`Apply ${picked.length} file(s)`, 'Preview diffs first', 'Cancel'],
+        { title: 'SendToAI: write the edits?' });
+      if (!choice || choice === 'Cancel') { return; }
+      if (choice === 'Preview diffs first') {
+        for (const it of picked.slice(0, 8)) {
+          const target = vscode.Uri.joinPath(root, it.p);
+          let exists = true;
+          try { await vscode.workspace.fs.stat(target); } catch { exists = false; }
+          const previewUri = vscode.Uri.parse(`sendtoai-preview:/${it.p}`);
+          previewStore.set(previewUri.toString(), it.c);
+          previewEmitter.fire(previewUri);
+          const left = exists ? target : vscode.Uri.parse('sendtoai-preview:/__empty__');
+          if (!exists) { previewStore.set(left.toString(), ''); }
+          await vscode.commands.executeCommand('vscode.diff', left, previewUri, `${it.p} ← AI reply`, { preview: false });
+        }
+        const go = await vscode.window.showQuickPick([`Apply ${picked.length} file(s)`, 'Cancel'], { title: 'SendToAI: previews are open — write the edits?' });
+        if (!go || go === 'Cancel') { return; }
+      }
       const edit = new vscode.WorkspaceEdit();
       for (const it of picked) {
         const uri = vscode.Uri.joinPath(root, it.p);
@@ -719,6 +729,35 @@ export function activate(context: vscode.ExtensionContext) {
         ? `✅ Applied ${picked.length} file(s). Review in the editor or git diff · Ctrl+Z to undo.`
         : 'SendToAI: Could not apply the edits.');
       if (ok) { void maybeAskForReview(context); }
+    }),
+
+    vscode.workspace.registerTextDocumentContentProvider('sendtoai-preview', {
+      onDidChange: previewEmitter.event,
+      provideTextDocumentContent: (uri) => previewStore.get(uri.toString()) ?? '',
+    }),
+
+    // Every big paste becomes an attachment in ChatGPT and Claude anyway; this
+    // gives the user the file directly (and a filename they chose).
+    vscode.commands.registerCommand('sendtoai.saveBundle', async () => {
+      if (!lastBundle) {
+        vscode.window.showInformationMessage('SendToAI: Bundle something first, then save it as a file.');
+        return;
+      }
+      const r = resolveRoot();
+      const safe = lastBundle.folderName.replace(/[^A-Za-z0-9._-]+/g, '-') || 'project';
+      const target = await vscode.window.showSaveDialog({
+        defaultUri: r ? vscode.Uri.joinPath(r, `${safe}-bundle.txt`) : undefined,
+        filters: { 'Text': ['txt'], 'Markdown': ['md'] },
+        title: 'Save bundle as a file to attach in your AI chat',
+      });
+      if (!target) { return; }
+      await vscode.workspace.fs.writeFile(target, Buffer.from(lastBundle.text, 'utf8'));
+      const pick = await vscode.window.showInformationMessage(`✅ Saved ${path.basename(target.fsPath)} — attach it in ChatGPT, Claude or Gemini.`, 'Reveal in folder');
+      if (pick) { vscode.commands.executeCommand('revealFileInOS', target); }
+    }),
+
+    vscode.commands.registerCommand('sendtoai.rateExtension', () => {
+      vscode.env.openExternal(vscode.Uri.parse(REVIEW_URL));
     }),
 
     vscode.commands.registerCommand('sendtoai.upgradeToPro', async () => {
