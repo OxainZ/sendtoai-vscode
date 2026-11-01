@@ -278,15 +278,18 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
   <div class="section-label">Fit to AI Window <span class="pro-tag" style="font-size:9px;background:linear-gradient(135deg,#f7b733,#e07b39);color:#fff;padding:1px 5px;border-radius:8px;font-weight:800;vertical-align:middle;">PRO</span></div>
   <select id="windowSelect">
     <option value="0">No limit (bundle all selected)</option>
-    <option value="27000">ChatGPT Free — 27K</option>
-    <option value="54000">ChatGPT Plus / Go — 54K (instant models)</option>
-    <option value="256000">ChatGPT Plus / Go — 256K (thinking models)</option>
-    <option value="128000">ChatGPT Pro — 128K</option>
+    <option value="27000">ChatGPT Free — 27K (instant models)</option>
+    <option value="54000">ChatGPT Plus / Go / Business — 54K (instant)</option>
+    <option value="256000">ChatGPT Plus / Business — 256K (thinking models)</option>
+    <option value="128000">ChatGPT Pro — 128K (instant)</option>
+    <option value="400000">ChatGPT Pro — 400K (thinking)</option>
+    <option value="200000">Claude — 200K (safe for any model or plan)</option>
+    <option value="500000">Claude Pro — 500K (Fable 5, Opus 4.x, Sonnet 4.6)</option>
+    <option value="1000000">Claude Pro — 1M (Fable 5.1, Opus 5/5.5, Sonnet 5/5.5, Haiku 5.5)</option>
     <option value="32000">Gemini Free — 32K</option>
+    <option value="128000">Gemini AI Plus — 128K</option>
     <option value="1000000">Gemini AI Pro / Ultra — 1M</option>
-    <option value="200000">Claude — 200K (older models, safe default)</option>
-    <option value="1000000">Claude — 1M (Opus / Sonnet 5.x, Fable)</option>
-    <option value="1000000">DeepSeek — 1M</option>
+    <option value="1000000">DeepSeek V4 (free web chat) — 1M</option>
   </select>
   <div class="hint">Long pastes turn into an attachment in ChatGPT and Claude. That is normal; the model still reads all of it.</div>
 </div>
@@ -350,10 +353,12 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
     <div class="bar-bg"><div class="bar-fill" id="barGptFree" style="width:0%"></div></div>
     <div class="ctx-row"><span class="ctx-lbl">ChatGPT Plus</span><span class="ctx-limit">54K</span><span class="ctx-pct" id="pctGptPlus">0%</span></div>
     <div class="bar-bg"><div class="bar-fill" id="barGptPlus" style="width:0%"></div></div>
-    <div class="ctx-row"><span class="ctx-lbl">Claude</span><span class="ctx-limit">1M</span><span class="ctx-pct" id="pctClaude">0%</span></div>
+    <div class="ctx-row"><span class="ctx-lbl">Claude</span><span class="ctx-limit">200K</span><span class="ctx-pct" id="pctClaude">0%</span></div>
     <div class="bar-bg"><div class="bar-fill" id="barClaude" style="width:0%"></div></div>
     <div class="ctx-row"><span class="ctx-lbl">Gemini Free</span><span class="ctx-limit">32K</span><span class="ctx-pct" id="pctGemini">0%</span></div>
     <div class="bar-bg"><div class="bar-fill" id="barGemini" style="width:0%"></div></div>
+    <div class="ctx-row"><span class="ctx-lbl">Claude / Gemini paid</span><span class="ctx-limit">1M</span><span class="ctx-pct" id="pctPaid">0%</span></div>
+    <div class="bar-bg"><div class="bar-fill" id="barPaid" style="width:0%"></div></div>
   </div>
   <div class="cost-card">
     <div class="cost-title">Cost per send</div>
@@ -365,7 +370,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
     <div class="section-label">File types</div>
     <div class="types-wrap" id="typePills"></div>
   </div>
-  <div id="warnBox" style="display:none" class="warn">⚠️ Large bundle — use a 1M-context model (Claude Opus/Sonnet 5.x, Gemini AI Pro, ChatGPT thinking models) or Fit to AI Window</div>
+  <div id="warnBox" style="display:none" class="warn">⚠️ Large bundle — ChatGPT and Claude attach pastes over ~5K characters as a file; 1M context needs a paid Claude (Sonnet/Opus 5.x) or Gemini AI Pro plan, or use Fit to AI Window</div>
   <button class="btn-copy" data-act="send" data-arg="copyAgain">📋 Copy Again</button>
   <p class="timestamp" id="ts"></p>
 </div>

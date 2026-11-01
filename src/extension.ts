@@ -352,7 +352,7 @@ async function maybeAskForReview(context: vscode.ExtensionContext): Promise<void
     if (context.globalState.get<boolean>('reviewAskDone')) { return; }
     const n = (context.globalState.get<number>('successCount') ?? 0) + 1;
     await context.globalState.update('successCount', n);
-    const askAt = context.globalState.get<number>('reviewAskAt') ?? 3;
+    const askAt = context.globalState.get<number>('reviewAskAt') ?? 5;
     if (n < askAt) { return; }
     const pick = await vscode.window.showInformationMessage(
       `SendToAI has bundled for you ${n} times — if it's saving you time, a Marketplace review really helps a small extension get found.`,

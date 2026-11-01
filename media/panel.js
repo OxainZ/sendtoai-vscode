@@ -444,8 +444,9 @@
     // Context windows as of Nov 2026 (chatgpt.com/pricing, Anthropic help 8606394, Google help 14903178)
     setBar('barGptFree', 'pctGptFree', 27000);
     setBar('barGptPlus', 'pctGptPlus', 54000);
-    setBar('barClaude',  'pctClaude',  1000000);
+    setBar('barClaude',  'pctClaude',  200000);
     setBar('barGemini',  'pctGemini',  32000);
+    setBar('barPaid',    'pctPaid',    1000000);
 
     const pills = document.getElementById('typePills');
     pills.innerHTML = '';
