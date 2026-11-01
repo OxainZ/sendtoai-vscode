@@ -923,10 +923,10 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
       const msgs = {
         files:   '⚡ <strong>That\\'s a Pro-size bundle</strong> — ' +
                  (typeof d.fileCount === 'number' ? 'you selected <strong>' + d.fileCount + ' files</strong>; the' : 'the') +
-                 ' Free tier bundles up to 50.<br>Pro removes the limit — $9, once, yours forever.',
-        git:     '🔀 <strong>Git Changes is a Pro feature</strong> — bundle only what you changed, perfect for AI code review.<br>$9 once unlocks it (plus unlimited files, presets, and Fit to AI Window).',
-        window:  '🎯 <strong>Fit to AI Window is a Pro feature</strong> — auto-trims the bundle to your AI\\'s context, keeping the most relevant files.<br>$9 once unlocks it (plus unlimited files, git diff, and presets).',
-        presets: '📋 <strong>Named presets are a Pro feature</strong> — save this selection and reload it in one click.<br>$9 once unlocks presets, unlimited files, git diff, and Fit to AI Window.',
+                 ' Free tier bundles up to 50.<br>Pro removes the limit — $9.99, once, yours forever.',
+        git:     '🔀 <strong>Git Changes is a Pro feature</strong> — bundle only what you changed, perfect for AI code review.<br>$9.99 once unlocks it (plus unlimited files, presets, and Fit to AI Window).',
+        window:  '🎯 <strong>Fit to AI Window is a Pro feature</strong> — auto-trims the bundle to your AI\\'s context, keeping the most relevant files.<br>$9.99 once unlocks it (plus unlimited files, git diff, and presets).',
+        presets: '📋 <strong>Named presets are a Pro feature</strong> — save this selection and reload it in one click.<br>$9.99 once unlocks presets, unlimited files, git diff, and Fit to AI Window.',
       };
       document.getElementById('upgradeMsg').innerHTML = msgs[d.reason] || msgs.files;
       document.getElementById('upgradeBanner').classList.add('show');

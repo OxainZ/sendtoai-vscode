@@ -47,7 +47,7 @@ A file imported by a relevant file inherits part of that relevance, so the **loc
 
 ---
 
-## 💰 Free + Pro ($9 one-time)
+## 💰 Free + Pro ($9.99 one-time)
 
 Works with **any** AI you already use — it's a companion to your existing chat subscription (or a free one), not a replacement for it. No monthly fee, no API key.
 
@@ -58,7 +58,7 @@ Works with **any** AI you already use — it's a companion to your existing chat
 | **Task-aware relevance ranking on trim** | — | biggest-file-first cuts | ✅ keeps what matters |
 | **Dependency-graph aware selection** | ❌ | ❌ | ✅ |
 | **Your code leaves your machine** | to your AI only | uploaded to their server | to your AI only |
-| **Price** | free (your time) | varies | **free · Pro $9 once** |
+| **Price** | free (your time) | varies | **free · Pro $9.99 once** |
 
 ### 🆓 Free tier
 - Project bundling — bundles the **50 most relevant files** of any project (never a paywall: you always get a usable bundle, ranked by relevance to your task)
@@ -69,7 +69,7 @@ Works with **any** AI you already use — it's a companion to your existing chat
 - Context-window bars for ChatGPT / Claude / Gemini
 - `.gitignore` + `.sendtoaiignore` aware auto-ignore
 
-### 💎 Pro tier ($9 lifetime)
+### 💎 Pro tier ($9.99 lifetime)
 - **Unlimited** files per bundle
 - **🔀 Git diff mode** — bundle only changed/staged files for AI code review
 - **🎯 Fit to AI Window** — auto-trim to your AI's context using relevance
@@ -78,7 +78,7 @@ Works with **any** AI you already use — it's a companion to your existing chat
 - Use it on up to **5 machines** — run *Deactivate License on This Machine* to move a slot
 - All future Pro features included
 
-**[🚀 Upgrade — $9 lifetime](https://sendtoai.dev)** · No subscription. 14-day money-back guarantee.
+**[🚀 Upgrade — $9.99 lifetime](https://sendtoai.dev)** · plus VAT where applicable · No subscription. 14-day money-back guarantee.
 
 ---
 

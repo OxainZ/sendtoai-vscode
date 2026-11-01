@@ -3,6 +3,12 @@
 All notable changes to **Send to AI** are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [3.11.1] — 2026-11-01
+
+### Changed
+- Price shown everywhere is now $9.99, matching what checkout actually charges
+  (plus VAT where applicable). It was listed as $9.
+
 ## [3.11.0] — 2026-11-01
 
 **Security hardening + first-sale fixes.** Driven by a full audit of the code,
