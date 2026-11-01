@@ -3,6 +3,15 @@
 All notable changes to **Send to AI** are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [3.15.3] — 2026-11-02
+
+### Changed
+- Pro is $14.99 one-time (was $9.99). Nothing changes for existing keys: same
+  product, same five machines, same lifetime updates, same 30-day refund.
+- README points teams at the new Team pack ($39 once, 5 developers, 25
+  activations on one key), sold as a variant of the same product so the
+  extension validates it with no code change.
+
 ## [3.15.2] — 2026-11-02
 
 **Second independent audit; everything it found is fixed.**
