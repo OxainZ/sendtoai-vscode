@@ -1,6 +1,7 @@
 # 🚀 Send to AI — Copy Codebase to ChatGPT, Claude & Gemini
 
 [![Version](https://img.shields.io/visual-studio-marketplace/v/oxainz.sendtoai?label=marketplace&color=e07b39)](https://marketplace.visualstudio.com/items?itemName=oxainz.sendtoai)
+[![Open VSX](https://img.shields.io/open-vsx/v/oxainz/sendtoai?label=open%20vsx&color=5b4bdb)](https://open-vsx.org/extension/oxainz/sendtoai)
 [![MIT License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 <!-- Uncomment once the numbers are worth showing (they render live from the marketplace):
 [![Installs](https://img.shields.io/visual-studio-marketplace/i/oxainz.sendtoai)](https://marketplace.visualstudio.com/items?itemName=oxainz.sendtoai)
@@ -90,7 +91,7 @@ Works with **any** AI you already use — it's a companion to your existing chat
 
 ## 📦 Quick start
 
-1. **Install** the extension — the **SendToAI** icon appears in the activity bar.
+1. **Install** the extension from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=oxainz.sendtoai) or, for Cursor, Windsurf and VSCodium, from [Open VSX](https://open-vsx.org/extension/oxainz/sendtoai) — the **SendToAI** icon appears in the activity bar.
 2. Open the panel and use the buttons, or right-click a file/folder → **Send to AI**.
 3. Paste into your favourite AI chat — then copy its reply and hit **📥 Apply AI Reply**.
 
