@@ -2,7 +2,7 @@
     "name": "sendtoai",
     "displayName": "Send to AI — Copy Your Whole Project or Codebase into ChatGPT, Claude & Gemini",
     "description": "Copy your entire project, codebase or repo context into any AI chat in one click. Bundle your errors + the connected code into one paste-ready block — then paste the reply back and apply the edits to your files. No API key. Free tier bundles the 50 most relevant files; Pro bundles the whole project.",
-    "version": "3.13.1",
+    "version": "3.14.0",
     "publisher": "oxainz",
     "icon": "resources/icon.png",
     "license": "MIT",

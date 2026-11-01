@@ -81,3 +81,17 @@ test('estimateTokens is monotonic and roughly chars/4', () => {
   assert.ok(a > 0 && b > a);
   assert.ok(Math.abs(a - 100) <= 20);
 });
+
+const { decodeText } = require('../out/bundler.js');
+
+test('decodeText: UTF-8, UTF-8 BOM, UTF-16 LE/BE by BOM, binary -> null', () => {
+  const enc = (s) => new TextEncoder().encode(s);
+  assert.equal(decodeText(enc('plain')), 'plain');
+  assert.equal(decodeText(new Uint8Array([0xef, 0xbb, 0xbf, ...enc('bom')])), 'bom', 'UTF-8 BOM stripped');
+  const le = new Uint8Array([0xff, 0xfe, 0x68, 0x00, 0x69, 0x00]);
+  assert.equal(decodeText(le), 'hi', 'UTF-16 LE');
+  const be = new Uint8Array([0xfe, 0xff, 0x00, 0x68, 0x00, 0x69]);
+  assert.equal(decodeText(be), 'hi', 'UTF-16 BE');
+  assert.equal(decodeText(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01])), null, 'NUL without BOM is binary');
+  assert.equal(decodeText(new Uint8Array([])), '');
+});

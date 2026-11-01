@@ -543,15 +543,33 @@ export async function scanProjectTree(rootUri: vscode.Uri): Promise<FileNode> {
   return root;
 }
 
+// ── Text decoding ─────────────────────────────────────────────────────────────
+// Returns null for binary content. UTF-16 files (common on Windows: PowerShell
+// output, some IDE-saved files) contain NUL bytes and used to be reported as
+// binary; they are recognised by their byte-order mark and decoded instead.
+export function decodeText(bytes: Uint8Array): string | null {
+  if (bytes.length >= 2) {
+    if (bytes[0] === 0xff && bytes[1] === 0xfe) { return new TextDecoder('utf-16le').decode(bytes.subarray(2)); }
+    if (bytes[0] === 0xfe && bytes[1] === 0xff) { return new TextDecoder('utf-16be').decode(bytes.subarray(2)); }
+  }
+  for (let i = 0; i < bytes.length; i++) {
+    if (bytes[i] === 0) { return null; }
+  }
+  // TextDecoder strips a UTF-8 BOM by default (ignoreBOM: false)
+  return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+}
+
 // ── Collect: open tabs ────────────────────────────────────────────────────────
 
 function collectOpenTabs(rootPath: string): vscode.Uri[] {
   const uris: vscode.Uri[] = [];
+  const seen = new Set<string>();   // the same file open in two editor groups counts once
   for (const group of vscode.window.tabGroups.all) {
     for (const tab of group.tabs) {
-      if (tab.input instanceof vscode.TabInputText) {
+      if (tab.input instanceof vscode.TabInputText && tab.input.uri.scheme === 'file') {
         const p = tab.input.uri.fsPath;
-        if (p === rootPath || p.startsWith(rootPath + path.sep) || p.startsWith(rootPath + '/')) {
+        if ((p === rootPath || p.startsWith(rootPath + path.sep) || p.startsWith(rootPath + '/')) && !seen.has(p)) {
+          seen.add(p);
           uris.push(tab.input.uri);
         }
       }
@@ -562,23 +580,40 @@ function collectOpenTabs(rootPath: string): vscode.Uri[] {
 
 // ── Collect: git changes ──────────────────────────────────────────────────────
 
+// vscode.git Status values for changes that no longer have a file on disk
+const GIT_DELETED_STATUSES = new Set([2 /* INDEX_DELETED */, 6 /* DELETED */]);
+
+function isInside(rootPath: string, p: string): boolean {
+  return p === rootPath || p.startsWith(rootPath + path.sep) || p.startsWith(rootPath + '/');
+}
+
 async function collectGitChanges(rootPath: string): Promise<vscode.Uri[]> {
   const ext = vscode.extensions.getExtension('vscode.git');
-  if (!ext) { return []; }
-  const api = ext.isActive ? ext.exports.getAPI(1) : (await ext.activate()).getAPI(1);
-  const repo = api.repositories.find((r: { rootUri: vscode.Uri }) =>
-    r.rootUri.fsPath === rootPath || rootPath.startsWith(r.rootUri.fsPath)
-  );
-  if (!repo) { return []; }
+  if (!ext) { throw new Error('The built-in Git extension is disabled, so Git Changes mode has nothing to read. Enable it in Settings ("git.enabled") or use Project mode.'); }
+  const exports = ext.isActive ? ext.exports : await ext.activate();
+  if (!exports?.getAPI) { throw new Error('The Git extension is still starting. Try again in a moment.'); }
+  const api = exports.getAPI(1);
 
-  const changed = [
-    ...repo.state.workingTreeChanges,
-    ...repo.state.indexChanges,
-  ].map((c: { uri: vscode.Uri }) => c.uri);
+  // The DEEPEST repository that contains the workspace folder (a nested repo
+  // beats its parent), matched on a path boundary so "repo" never matches "repo2".
+  interface GitChange { uri: vscode.Uri; status: number }
+  interface GitRepo { rootUri: vscode.Uri; state: { workingTreeChanges: GitChange[]; indexChanges: GitChange[] } }
+  const candidates = (api.repositories as GitRepo[])
+    .filter(r => isInside(r.rootUri.fsPath, rootPath))
+    .sort((a, b) => b.rootUri.fsPath.length - a.rootUri.fsPath.length);
+  const repo: GitRepo | undefined = candidates[0];
+  if (!repo) { throw new Error('This folder is not inside a Git repository.'); }
 
-  // Deduplicate
   const seen = new Set<string>();
-  return changed.filter(u => { if (seen.has(u.fsPath)) { return false; } seen.add(u.fsPath); return true; });
+  const out: vscode.Uri[] = [];
+  for (const c of [...repo.state.indexChanges, ...repo.state.workingTreeChanges]) {
+    if (GIT_DELETED_STATUSES.has(c.status)) { continue; }        // nothing to read
+    const p = c.uri.fsPath;
+    if (!isInside(rootPath, p) || seen.has(p)) { continue; }     // outside this folder (parent repo) or duplicate
+    seen.add(p);
+    out.push(c.uri);
+  }
+  return out;
 }
 
 // ── Main bundler ──────────────────────────────────────────────────────────────
@@ -616,7 +651,7 @@ export async function buildBundle(
   } else if (mode === 'git') {
     const changed = await collectGitChanges(rootPath);
     if (changed.length === 0) {
-      throw new Error('No git changes found. Make sure you have staged or modified files.');
+      throw new Error('No changed files in this folder. Git Changes mode bundles modified, staged and untracked files; commit nothing yet, edit something, then try again.');
     }
     for (const uri of changed) {
       const rel  = path.relative(rootPath, uri.fsPath).replace(/\\/g, '/');
@@ -701,15 +736,11 @@ export async function buildBundle(
           return { rel, content: `[Skipped — ${size.toLocaleString()} bytes exceeds the ${MAX_FILE_BYTES / 1_000_000} MB per-file limit]` };
         }
         const bytes = await vscode.workspace.fs.readFile(uri);
-        // Scan all bytes — file is already in memory, no reason to cap at 8192
-        let binary = false;
-        for (let i = 0; i < bytes.length; i++) {
-          if (bytes[i] === 0) { binary = true; break; }
-        }
-        if (binary) {
+        const decoded = decodeText(bytes);
+        if (decoded === null) {
           return { rel, content: `[Binary file — ${bytes.length.toLocaleString()} bytes — skipped]` };
         }
-        text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+        text = decoded;
       }
       if (format === 'compact' || format === 'minimal') {
         text = compactSource(text, path.extname(uri.fsPath).toLowerCase());
