@@ -170,6 +170,11 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
     });
   }
 
+  /** Demo/test hook: drive the page the way a user would (pointer + real clicks). */
+  public demo(action: { type: 'click'; selector: string } | { type: 'prompt'; text: string }): void {
+    this._view?.webview.postMessage({ command: '__demo', ...action });
+  }
+
   public updateTree(nodes: FileNode): void {
     this._view?.webview.postMessage({ command: 'scanResult', tree: nodes });
   }

@@ -13,6 +13,7 @@ public class Win32 {
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
   [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int W, int H, bool repaint);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
+  [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdc, uint flags);
 }
 "@
 
@@ -46,7 +47,11 @@ while (-not (Test-Path $stop)) {
     if ($w -gt 200 -and $h -gt 200) {
       $bmp = New-Object System.Drawing.Bitmap $w, $h
       $g = [System.Drawing.Graphics]::FromImage($bmp)
-      $g.CopyFromScreen($r.Left, $r.Top, 0, 0, $bmp.Size)
+      # Render the window's own contents (PW_RENDERFULLCONTENT), never the screen: this
+      # captures only the harness window even when another window covers it.
+      $hdc = $g.GetHdc()
+      [Win32]::PrintWindow($proc.MainWindowHandle, $hdc, 2) | Out-Null
+      $g.ReleaseHdc($hdc)
       $g.Dispose()
       $ms = [int]([DateTime]::UtcNow - $t0).TotalMilliseconds
       $bmp.Save((Join-Path $FramesDir ("{0:D5}_{1:D7}.png" -f $i, $ms)), [System.Drawing.Imaging.ImageFormat]::Png)

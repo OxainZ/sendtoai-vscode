@@ -934,6 +934,7 @@ export function activate(context: vscode.ExtensionContext) {
         return scanProjectTree(r);
       },
       bundle: handleBundle,
+      panelDemo: (a: { type: 'click'; selector: string } | { type: 'prompt'; text: string }) => panel.demo(a),
       inbound: () => panel.inbound,
       isPro: () => cachedProStatus,
     },
