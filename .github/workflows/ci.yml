@@ -27,6 +27,9 @@ jobs:
       - name: Refund-hook Worker tests
         run: npm run test:worker
 
+      - name: End-to-end (real VS Code, fixture workspace, webview must respond)
+        run: xvfb-run -a npm run test:e2e
+
       - name: Audit shipped dependencies
         run: npm audit --omit=dev
 

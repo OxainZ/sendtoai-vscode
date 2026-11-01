@@ -13,3 +13,5 @@ research_notes/
 reports/
 test/fixtures/sample/dist/
 test/fixtures/sample/big.csv
+test/fixtures/sample/src/*.js
+test/fixtures/sample/src/*.js.map
