@@ -7,7 +7,14 @@ updates:
     groups:
       dev-tooling:
         patterns: ['*']
+        update-types: ['minor', 'patch']
     open-pull-requests-limit: 3
+    ignore:
+      # Majors need a human: TypeScript 7 / ESLint 10 change configs, and
+      # @types/vscode must never exceed engines.vscode (^1.74) or vsce refuses
+      # to package. @types/node tracks the extension host's Node, not latest.
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: npm
     directory: /worker
