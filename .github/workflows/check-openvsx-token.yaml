@@ -1,0 +1,27 @@
+# Manual check that the OVSX_PAT secret of the "marketplace" environment is
+# present and accepted by Open VSX for the oxainz namespace. Publishes nothing.
+# Actions -> "Check Open VSX token" -> Run workflow -> approve the environment.
+name: Check Open VSX token
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    environment: marketplace
+    env:
+      OVSX_PAT: ${{ secrets.OVSX_PAT }}
+    steps:
+      - name: Secret is present
+        run: |
+          if [ -z "$OVSX_PAT" ]; then
+            echo "::error::OVSX_PAT is empty: the secret is missing from the marketplace environment (or named differently)."
+            exit 1
+          fi
+          echo "OVSX_PAT is set (${#OVSX_PAT} chars)"
+      - name: Open VSX accepts it for the oxainz namespace
+        run: npx ovsx@1.3.0 verify-pat oxainz
