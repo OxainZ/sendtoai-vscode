@@ -1,0 +1,15 @@
+{
+    "name": "sendtoai-refund-hook",
+    "private": true,
+    "version": "1.0.0",
+    "type": "module",
+    "description": "Cloudflare Worker: disables Lemon Squeezy license keys when their order is refunded",
+    "scripts": {
+        "test": "node --test \"test/*.test.js\"",
+        "deploy": "npx wrangler@4 deploy",
+        "tail": "npx wrangler@4 tail"
+    },
+    "engines": {
+        "node": ">=20"
+    }
+}

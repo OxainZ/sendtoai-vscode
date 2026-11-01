@@ -206,13 +206,13 @@ async function refreshLicense(
 // ── Round-trip: parse an AI chat reply into editable file blocks ──────────────
 // Recognizes a file path from the fence info string (```ts src/a.ts) or a line
 // just before the fence (**src/a.ts**, `src/a.ts`, File: src/a.ts, // src/a.ts).
-function extractPathToken(s: string): string {
-  const cleaned = s.replace(/[*`>#]/g, '').replace(/^\s*(?:file|path)\s*:/i, '').trim();
+export function extractPathToken(s: string): string {
+  const cleaned = s.replace(/\\/g, '/').replace(/[*`>#]/g, '').replace(/^\s*(?:file|path)\s*:/i, '').trim();
   const m = cleaned.match(/([\w][\w./-]*\.[A-Za-z][A-Za-z0-9]{0,7})\b/);
-  return m ? m[1].replace(/\\/g, '/') : '';
+  return m ? m[1] : '';
 }
 
-function parseFileBlocks(text: string): { path: string; content: string }[] {
+export function parseFileBlocks(text: string): { path: string; content: string }[] {
   const out: { path: string; content: string }[] = [];
   const lines = text.split(/\r?\n/);
   let pending = '';

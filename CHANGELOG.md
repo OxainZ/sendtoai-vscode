@@ -38,6 +38,9 @@ the listing and the licensing flow after the first Pro purchase.
   `#region` and shebang lines from C, C++, C#, Rust, Swift, Go, Java or Kotlin
   files. Those languages now drop full-line `//` comments instead.
 - Opening the panel with no folder open no longer spins on "Scanning project…".
+- `.gitignore` patterns starting with `**/` now match root-level files, and
+  `a/**/b` matches `a/b`, as git itself does.
+- Apply AI Reply keeps the directory of Windows-style paths (`lib\util.py`).
 
 ### Changed
 - Cost estimates use current Anthropic list prices (Haiku 5.5 / Sonnet 5.5 /
@@ -46,6 +49,10 @@ the listing and the licensing flow after the first Pro purchase.
   tagged releases publish through Marketplace Trusted Publishing (no stored
   token).
 - README states exactly what leaves your machine and how refunds work.
+- First unit-test suite (`npm test`) covering ignore rules, secret filtering,
+  comment stripping, reply parsing and cost estimates.
+- New `worker/`: a Cloudflare Worker that disables a license key when its
+  order is refunded or charged back (Lemon Squeezy never does this itself).
 
 ## [3.10.0] — 2026-08-16
 

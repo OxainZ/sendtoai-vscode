@@ -21,8 +21,11 @@ jobs:
 
       - run: npm ci
 
-      - name: Compile (strict TypeScript)
-        run: npm run compile
+      - name: Compile + unit tests
+        run: npm test
+
+      - name: Refund-hook Worker tests
+        run: npm run test:worker
 
       - name: Audit shipped dependencies
         run: npm audit --omit=dev

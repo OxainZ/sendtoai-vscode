@@ -174,7 +174,9 @@
         "vscode:prepublish": "npm run compile",
         "compile": "tsc -p ./",
         "watch": "tsc -watch -p ./",
-        "publish:ovsx": "npx ovsx publish -p $OVSX_TOKEN"
+        "publish:ovsx": "npx ovsx publish -p $OVSX_TOKEN",
+        "test": "npm run compile && node --test \"test/*.test.cjs\"",
+        "test:worker": "cd worker && node --test \"test/*.test.js\""
     },
     "devDependencies": {
         "@types/node": "16.x",

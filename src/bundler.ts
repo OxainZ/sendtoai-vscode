@@ -82,7 +82,7 @@ interface CompiledRule {
   needsPath:   boolean; // anchored or has slash/globstar → match against relPath
 }
 
-function compilePattern(raw: string): CompiledRule | null {
+export function compilePattern(raw: string): CompiledRule | null {
   const isNeg    = raw.startsWith('!');
   const stripped = (isNeg ? raw.slice(1) : raw).replace(/\/$/, '');
   if (!stripped) { return null; }
@@ -100,7 +100,10 @@ function compilePattern(raw: string): CompiledRule | null {
     if (c === '\\' && i + 1 < p.length) {
       re += p[++i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     } else if (c === '*' && p[i + 1] === '*') {
-      re += '.*'; i++;
+      // `**/` = zero or more directories (so **/x matches x and a/b/x);
+      // a trailing or bare `**` = anything, slashes included.
+      if (p[i + 2] === '/') { re += '(?:.*/)?'; i += 2; }
+      else { re += '.*'; i++; }
     } else if (c === '*') {
       re += '[^/]*';
     } else if (c === '?') {
@@ -132,7 +135,7 @@ async function loadGitignorePatterns(rootUri: vscode.Uri): Promise<CompiledRule[
     .filter((r): r is CompiledRule => r !== null);
 }
 
-function matchesGitignore(name: string, rules: CompiledRule[], relPath = ''): boolean {
+export function matchesGitignore(name: string, rules: CompiledRule[], relPath = ''): boolean {
   let ignored = false;
   for (const { rx, isNeg, hasGlobstar, needsPath } of rules) {
     if (needsPath && !relPath) { continue; }
@@ -147,7 +150,7 @@ function matchesGitignore(name: string, rules: CompiledRule[], relPath = ''): bo
 
 // ── Core ignore logic ─────────────────────────────────────────────────────────
 
-function shouldIgnore(name: string, isDir: boolean, gitignore: CompiledRule[], relPath = ''): boolean {
+export function shouldIgnore(name: string, isDir: boolean, gitignore: CompiledRule[], relPath = ''): boolean {
   if (!ENV_TEMPLATE_RE.test(name)) {
     for (const prefix of IGNORE_PREFIXES) {
       if (name.startsWith(prefix)) { return true; }
@@ -180,7 +183,7 @@ function shouldIgnore(name: string, isDir: boolean, gitignore: CompiledRule[], r
 // Open Tabs / Git Changes hand us file paths directly, so the directory walk
 // that normally prunes node_modules/, dist/, .git/ etc. never runs for them.
 // Re-check every ancestor directory so those modes obey the same rules.
-function isUnderIgnoredDir(rel: string, gitignore: CompiledRule[]): boolean {
+export function isUnderIgnoredDir(rel: string, gitignore: CompiledRule[]): boolean {
   const parts = rel.split('/');
   let prefix = '';
   for (let i = 0; i < parts.length - 1; i++) {
@@ -239,7 +242,7 @@ const REGEX_KEYWORDS = new Set([
   'throw', 'case', 'void', 'yield', 'await', 'of',
 ]);
 
-function stripJSComments(src: string): string {
+export function stripJSComments(src: string): string {
   let out = '';
   let i   = 0;
   const n = src.length;
@@ -346,7 +349,7 @@ function stripJSComments(src: string): string {
 
 // ── Compact: strip comments + trailing whitespace ─────────────────────────────
 
-function compactSource(text: string, ext: string): string {
+export function compactSource(text: string, ext: string): string {
   const jsExts = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
   const codeExts = new Set([
     '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
@@ -401,7 +404,7 @@ const QUERY_STOPWORDS = new Set([
   'when', 'which', 'about', 'into', 'out', 'all', 'function', 'class', 'const',
 ]);
 
-function extractQueryTerms(prompt: string): string[] {
+export function extractQueryTerms(prompt: string): string[] {
   if (!prompt) { return []; }
   const raw = prompt.toLowerCase().match(/[a-z_][a-z0-9_]{2,}/g) ?? [];
   return [...new Set(raw)].filter(t => !QUERY_STOPWORDS.has(t)).slice(0, 40);
