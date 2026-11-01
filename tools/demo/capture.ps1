@@ -53,8 +53,8 @@ while (-not (Test-Path $stop)) {
       [Win32]::PrintWindow($proc.MainWindowHandle, $hdc, 2) | Out-Null
       $g.ReleaseHdc($hdc)
       $g.Dispose()
-      $ms = [int]([DateTime]::UtcNow - $t0).TotalMilliseconds
-      $bmp.Save((Join-Path $FramesDir ("{0:D5}_{1:D7}.png" -f $i, $ms)), [System.Drawing.Imaging.ImageFormat]::Png)
+      $ms = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+      $bmp.Save((Join-Path $FramesDir ("{0:D5}_{1:D13}.png" -f $i, $ms)), [System.Drawing.Imaging.ImageFormat]::Png)
       $bmp.Dispose()
       $i++
     }

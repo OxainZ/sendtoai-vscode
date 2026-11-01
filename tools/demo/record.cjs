@@ -20,7 +20,11 @@ fs.mkdirSync(frames, { recursive: true });
 fs.mkdirSync(path.join(fixture, 'node_modules', 'leftpad'), { recursive: true });
 fs.writeFileSync(path.join(fixture, 'node_modules', 'leftpad', 'index.js'), 'module.exports = s => s;\n');
 fs.rmSync(path.join(fixture, 'big.csv'), { force: true });   // e2e leftover, ugly in a demo
-const cleanupFixture = () => fs.rmSync(path.join(fixture, 'src', 'utils'), { recursive: true, force: true }); // file the demo reply creates
+// The demo reply creates src/utils/clamp.ts and rewrites src/math.ts; put both back.
+const cleanupFixture = () => {
+  fs.rmSync(path.join(fixture, 'src', 'utils', 'clamp.ts'), { force: true });
+  try { require('node:child_process').execFileSync('git', ['checkout', '--', 'test/fixtures/sample/src/math.ts'], { cwd: repo, stdio: 'ignore' }); } catch { /* not a git checkout */ }
+};
 cleanupFixture();
 
 const ps = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(here, 'capture.ps1'), frames, 'Visual Studio Code'], { stdio: 'inherit' });

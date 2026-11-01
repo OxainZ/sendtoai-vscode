@@ -26,7 +26,7 @@ exports.run = async function run() {
   // 1. Scan: ignores apply (node_modules, .env, keys, dist via .gitignore); source is present
   const tree = await api._test.scan();
   const paths = filePaths(tree);
-  assert.ok(paths.includes('src/a.ts'), `src/a.ts missing from ${paths}`);
+  assert.ok(paths.includes('src/math.ts'), `src/math.ts missing from ${paths}`);
   assert.ok(paths.includes('README.md'));
   assert.ok(!paths.some((p) => p.startsWith('node_modules/')), 'node_modules must be ignored');
   assert.ok(!paths.includes('.env'), '.env must be ignored');
@@ -36,8 +36,8 @@ exports.run = async function run() {
   // 2. Bundle through the same handler the panel uses; the result lands on the clipboard
   await api._test.bundle({ mode: 'project', format: 'standard', prompt: '', includeContext: false, targetWindow: 0 });
   const clip = await vscode.env.clipboard.readText();
-  assert.ok(clip.includes('src/a.ts'), 'bundle must list src/a.ts');
-  assert.ok(clip.includes('export const a'), 'bundle must contain file content');
+  assert.ok(clip.includes('src/math.ts'), 'bundle must list src/math.ts');
+  assert.ok(clip.includes('export function add'), 'bundle must contain file content');
   assert.ok(!clip.includes('SECRET_TOKEN'), 'bundle must never contain .env contents');
   assert.ok(clip.includes('big.csv') && clip.includes('exceeds the 1 MB'), 'oversized files are listed with a skip placeholder');
   assert.ok(!clip.includes('x'.repeat(5000)), 'oversized file content must not be inlined');

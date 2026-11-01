@@ -7,12 +7,35 @@ const { GIFEncoder, quantize, applyPalette } = require('gifenc');
 
 const frames = path.join(__dirname, 'frames');
 const out = path.resolve(__dirname, '..', '..', 'images', 'demo.gif');
-const TARGET_W = 960;
-const MAX_FPS = 8;
+const TARGET_W = 840;
+const MAX_FPS = 5;
 const INSET = 12;          // px trimmed on every side: Windows window rects include an invisible border
-const SKIP_BEFORE_MS = 4000; // startup notifications before the panel has rendered
+const SKIP_BEFORE_MS = 3000; // startup notifications before the panel has rendered
 
-const files = fs.readdirSync(frames).filter(f => f.endsWith('.png')).sort();
+const { execFileSync } = require('node:child_process');
+const files = fs.readdirSync(frames).filter(f => /^\d{5}_\d+\.png$/.test(f)).sort();
+
+// captions.json comes from the demo suite (absolute ms); render pills with GDI+
+let captions = [];
+const capJson = path.join(frames, 'captions.json');
+if (fs.existsSync(capJson)) {
+  captions = JSON.parse(fs.readFileSync(capJson, 'utf8'));
+  execFileSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, 'captions.ps1'), capJson, frames], { stdio: 'inherit' });
+  captions.forEach((c, i) => { c.png = PNG.sync.read(fs.readFileSync(path.join(frames, 'caption_' + i + '.png'))); });
+}
+function composite(dst, src, x, y) {
+  for (let sy = 0; sy < src.height; sy++) {
+    const dy = y + sy; if (dy < 0 || dy >= dst.height) continue;
+    for (let sx = 0; sx < src.width; sx++) {
+      const dx = x + sx; if (dx < 0 || dx >= dst.width) continue;
+      const si = (sy * src.width + sx) * 4, di = (dy * dst.width + dx) * 4;
+      const a = src.data[si + 3] / 255; if (a === 0) continue;
+      dst.data[di] = src.data[si] * a + dst.data[di] * (1 - a);
+      dst.data[di + 1] = src.data[si + 1] * a + dst.data[di + 1] * (1 - a);
+      dst.data[di + 2] = src.data[si + 2] * a + dst.data[di + 2] * (1 - a);
+    }
+  }
+}
 if (files.length === 0) { console.error('no frames'); process.exit(1); }
 const ts = (f) => parseInt(f.split('_')[1], 10);
 
@@ -47,9 +70,17 @@ let last = null, lastTs = null, written = 0, pendingDelay = 0;
 const minGap = 1000 / MAX_FPS;
 for (let i = 0; i < files.length; i++) {
   const t = ts(files[i]);
-  if (t < SKIP_BEFORE_MS) { continue; }
+  if (t - ts(files[0]) < SKIP_BEFORE_MS) { continue; }
+  if (captions.length && (t < captions[0].from)) { continue; }           // nothing to show before the first caption
+  if (captions.length && t > captions[captions.length - 1].to) { break; }
   if (lastTs !== null && t - lastTs < minGap) { continue; }
   const png = crop(PNG.sync.read(fs.readFileSync(path.join(frames, files[i]))), INSET);
+  const cap = captions.find(c => t >= c.from && t <= c.to);
+  if (cap) {
+    // top of the editor area (right of the ~505 px sidebar at 1600 wide), clear of the bottom-right toasts
+    const sidebar = Math.round(png.width * 0.316);
+    composite(png, cap.png, sidebar + Math.round((png.width - sidebar - cap.png.width) / 2), 96);
+  }
   const w = Math.min(TARGET_W, png.width);
   const img = downscale(png, w);
   const same = last && Buffer.compare(Buffer.from(img.data), Buffer.from(last.data)) === 0;

@@ -362,6 +362,8 @@
     if (d.command === '__demo') {
       if (d.type === 'click') { demoClick(d.selector); }
       if (d.type === 'prompt') { demoType(d.text); }
+      if (d.type === 'select') { const el = document.querySelector(d.selector); if (el) { el.scrollIntoView({ block: 'center' }); el.value = d.value; el.dispatchEvent(new Event('change')); } }
+      if (d.type === 'scrollTop') { window.scrollTo({ top: 0, behavior: 'smooth' }); }
       return;
     }
     if (d.command === 'busy') {
