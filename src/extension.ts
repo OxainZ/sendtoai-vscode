@@ -109,7 +109,6 @@ interface StoredActivation {
 
 // ── HTTP helper ───────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function lsPost(path: string, body: object): Promise<any> {
   return new Promise((resolve, reject) => {
     const bodyStr = JSON.stringify(body);
