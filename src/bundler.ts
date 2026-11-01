@@ -31,6 +31,10 @@ const IGNORE_EXTENSIONS = new Set([
   '.pkl', '.pickle', '.joblib', '.npy', '.npz', '.h5', '.hdf5', '.parquet', '.feather',
   // Database files
   '.db', '.sqlite', '.sqlite3',
+  // Keys, certificates, credential stores
+  '.pem', '.key', '.p12', '.pfx', '.jks', '.keystore', '.der', '.ppk', '.gpg', '.kdbx',
+  // Infra state (contains secrets) and generated/bulk artifacts
+  '.tfstate', '.tfvars', '.log', '.jsonl', '.jar', '.class',
 ]);
 
 const IGNORE_NAMES = new Set([
@@ -40,6 +44,23 @@ const IGNORE_NAMES = new Set([
 ]);
 
 const IGNORE_PREFIXES = ['.env'];
+// Harmless templates that the .env prefix rule would otherwise hide
+const ENV_TEMPLATE_RE = /^\.env\.(example|sample|template|dist)$/i;
+
+// Credential-bearing files that must never end up in a prompt. Matched by
+// exact lower-cased name, in addition to the extension list above.
+const SECRET_NAMES = new Set([
+  '.npmrc', '.yarnrc', '.netrc', '.pypirc', '.git-credentials', '.htpasswd',
+  'credentials.json', 'service-account.json', 'serviceaccount.json',
+  'secrets.json', 'secrets.yml', 'secrets.yaml', 'secret.yml', 'secret.yaml',
+  'kubeconfig', 'terraform.tfstate', 'terraform.tfstate.backup',
+  '.boto', '.s3cfg', 'master.key', 'credentials.yml.enc',
+]);
+const SECRET_PREFIXES = ['id_rsa', 'id_dsa', 'id_ecdsa', 'id_ed25519'];
+
+// Per-file ceiling: anything larger is a log, dump or dataset, not source.
+// Reading it would copy the whole thing into memory three or four times over.
+export const MAX_FILE_BYTES = 1_000_000;
 
 // ── .gitignore / .sendtoaiignore support ──────────────────────────────────────
 
@@ -127,8 +148,15 @@ function matchesGitignore(name: string, rules: CompiledRule[], relPath = ''): bo
 // ── Core ignore logic ─────────────────────────────────────────────────────────
 
 function shouldIgnore(name: string, isDir: boolean, gitignore: CompiledRule[], relPath = ''): boolean {
-  for (const prefix of IGNORE_PREFIXES) {
-    if (name.startsWith(prefix)) { return true; }
+  if (!ENV_TEMPLATE_RE.test(name)) {
+    for (const prefix of IGNORE_PREFIXES) {
+      if (name.startsWith(prefix)) { return true; }
+    }
+  }
+  if (!isDir) {
+    const lowerName = name.toLowerCase();
+    if (SECRET_NAMES.has(lowerName)) { return true; }
+    if (SECRET_PREFIXES.some(p => lowerName.startsWith(p))) { return true; }
   }
   if (matchesGitignore(name, gitignore, relPath)) { return true; }
   if (isDir) {
@@ -146,6 +174,19 @@ function shouldIgnore(name: string, isDir: boolean, gitignore: CompiledRule[], r
   const ext = path.extname(name).toLowerCase();
   if (ext && IGNORE_EXTENSIONS.has(ext)) { return true; }
   if (name.endsWith('.lock')) { return true; }
+  return false;
+}
+
+// Open Tabs / Git Changes hand us file paths directly, so the directory walk
+// that normally prunes node_modules/, dist/, .git/ etc. never runs for them.
+// Re-check every ancestor directory so those modes obey the same rules.
+function isUnderIgnoredDir(rel: string, gitignore: CompiledRule[]): boolean {
+  const parts = rel.split('/');
+  let prefix = '';
+  for (let i = 0; i < parts.length - 1; i++) {
+    prefix = prefix ? `${prefix}/${parts[i]}` : parts[i];
+    if (shouldIgnore(parts[i], true, gitignore, prefix)) { return true; }
+  }
   return false;
 }
 
@@ -318,11 +359,17 @@ function compactSource(text: string, ext: string): string {
   // inside template literals and regex literals. Don't re-check // below.
   const src = isJs ? stripJSComments(text) : text;
 
+  // '#' starts a comment only in Python and Ruby. In C, C++, C#, Rust, Swift
+  // and friends a leading '#' is #include, #define, #[derive], #region or a
+  // shebang; stripping those silently corrupted the Compact/Minimal output.
+  const hashComment  = ext === '.py' || ext === '.rb';
+  const slashComment = !isJs && !hashComment;
   return src
     .split('\n')
     .map(line => {
-      // For non-JS languages (Python, Ruby, etc.) strip full-line # comments
-      if (!isJs && line.trimStart().startsWith('#')) { return null; }
+      const t = line.trimStart();
+      if (hashComment  && t.startsWith('#') && !t.startsWith('#!')) { return null; }
+      if (slashComment && t.startsWith('//')) { return null; }
       return line.trimEnd();
     })
     .filter((l): l is string => l !== null)
@@ -465,6 +512,9 @@ export async function scanProjectTree(rootUri: vscode.Uri): Promise<FileNode> {
     });
 
     for (const [childName, childType] of entries) {
+      // Never follow symlinks: a link to ~/.ssh would be bundled, and a link
+      // cycle (loop -> .) recurses until the OS path-length limit.
+      if ((childType & vscode.FileType.SymbolicLink) !== 0) { continue; }
       const isDir = (childType & vscode.FileType.Directory) !== 0;
       const childRel = relBase ? `${relBase}/${childName}` : childName;
       if (shouldIgnore(childName, isDir, gitignore, childRel)) { continue; }
@@ -558,7 +608,7 @@ export async function buildBundle(
     for (const uri of collectOpenTabs(rootPath)) {
       const rel  = path.relative(rootPath, uri.fsPath).replace(/\\/g, '/');
       const name = path.basename(uri.fsPath);
-      if (shouldIgnore(name, false, gitignore, rel)) { ignoredCount++; } else { included.push(uri); }
+      if (isUnderIgnoredDir(rel, gitignore) || shouldIgnore(name, false, gitignore, rel)) { ignoredCount++; } else { included.push(uri); }
     }
   } else if (mode === 'git') {
     const changed = await collectGitChanges(rootPath);
@@ -568,7 +618,7 @@ export async function buildBundle(
     for (const uri of changed) {
       const rel  = path.relative(rootPath, uri.fsPath).replace(/\\/g, '/');
       const name = path.basename(uri.fsPath);
-      if (shouldIgnore(name, false, gitignore, rel)) { ignoredCount++; } else { included.push(uri); }
+      if (isUnderIgnoredDir(rel, gitignore) || shouldIgnore(name, false, gitignore, rel)) { ignoredCount++; } else { included.push(uri); }
     }
   } else {
     // Full project scan
@@ -579,6 +629,7 @@ export async function buildBundle(
       catch { return; }
 
       for (const [name, type] of entries) {
+        if ((type & vscode.FileType.SymbolicLink) !== 0) { ignoredCount++; continue; }
         const isDir = (type & vscode.FileType.Directory) !== 0;
         const relPath = relBase ? `${relBase}/${name}` : name;
         const child = vscode.Uri.joinPath(uri, name);
@@ -634,6 +685,10 @@ export async function buildBundle(
     progress.report({ message: rel, increment: perStep });
     let content: string;
     try {
+      const size = (await vscode.workspace.fs.stat(uri)).size;
+      if (size > MAX_FILE_BYTES) {
+        return { rel, content: `[Skipped — ${size.toLocaleString()} bytes exceeds the ${MAX_FILE_BYTES / 1_000_000} MB per-file limit]` };
+      }
       const bytes = await vscode.workspace.fs.readFile(uri);
       // Scan all bytes — file is already in memory, no reason to cap at 8192
       let binary = false;

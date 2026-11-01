@@ -3,6 +3,50 @@
 All notable changes to **Send to AI** are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [3.11.0] — 2026-11-01
+
+**Security hardening + first-sale fixes.** Driven by a full audit of the code,
+the listing and the licensing flow after the first Pro purchase.
+
+### Security
+- **Apply AI Reply** now double-checks every target path resolves inside the
+  workspace, ignores "paths" that are really prose (`e.g.`, `Node.js`), and
+  leaves edits to files that execute on install or open (`package.json`,
+  `.github/`, `.vscode/`, `.husky/`, shell scripts) unticked by default so a
+  prompt-injected reply cannot silently rewrite them.
+- **Symlinks are never followed** when scanning or bundling. A link to
+  `~/.ssh` was previously bundled; a link cycle hung the extension host.
+- **Credential files are always skipped**: private keys and certificates,
+  `.npmrc`/`.yarnrc`/`.netrc`/`.pypirc`, `.git-credentials`, cloud
+  service-account JSON, Terraform state and more. `.env.example` is no longer
+  hidden by the `.env` rule.
+- **Per-file 1 MB ceiling** so a stray log or dataset cannot exhaust memory.
+- Open Tabs and Git Changes modes now respect ignored *directories*
+  (`node_modules/`, `dist/`, anything in `.gitignore`), not just file names.
+- The license key setting is now machine-scoped, so Settings Sync no longer
+  copies it to every machine and silently burns activation slots.
+- Webview nonce comes from `crypto.randomBytes`.
+
+### Fixed
+- A 5xx / 429 from the license server was cached as "key invalid" for a day;
+  it is now treated as a network blip and the previous verdict stands.
+- Re-entering a license key no longer deletes this machine's activation before
+  the new one succeeds, which orphaned a slot on any failure. Re-entering the
+  *same* key just re-verifies.
+- A system clock rolled backwards no longer extends the offline grace period.
+- Compact/Minimal formats no longer strip `#include`, `#define`, `#[derive]`,
+  `#region` and shebang lines from C, C++, C#, Rust, Swift, Go, Java or Kotlin
+  files. Those languages now drop full-line `//` comments instead.
+- Opening the panel with no folder open no longer spins on "Scanning project…".
+
+### Changed
+- Cost estimates use current Anthropic list prices (Haiku 5.5 / Sonnet 5.5 /
+  Opus 5.5) and the Claude context bar is 1M tokens.
+- Repository moved to CI: every push compiles, audits and packages the VSIX;
+  tagged releases publish through Marketplace Trusted Publishing (no stored
+  token).
+- README states exactly what leaves your machine and how refunds work.
+
 ## [3.10.0] — 2026-08-16
 
 **Honest tiers, clearer upgrade path.**

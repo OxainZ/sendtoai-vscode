@@ -1,0 +1,71 @@
+# Publish on a version tag (v3.11.0) using Marketplace Trusted Publishing.
+#
+# No Personal Access Token is stored anywhere. The job presents a short-lived
+# GitHub OIDC token and the Marketplace exchanges it for a 15-minute publish
+# credential. One-time setup (publisher owner, in a browser):
+#   1. https://marketplace.visualstudio.com/manage/publishers/oxainz
+#      -> Trusted Publishing -> Create
+#      owner: OxainZ   repo: sendtoai-vscode   workflow: release.yml
+#      environment: marketplace
+#   2. GitHub repo -> Settings -> Environments -> New "marketplace"
+#      -> Required reviewers: yourself (free on public repos). Every publish
+#      then needs one explicit click, which is the control a hijacked push
+#      cannot bypass.
+#   3. Optional Open VSX (Cursor / Windsurf / VSCodium users): add the token as
+#      the OVSX_PAT secret of the "marketplace" environment.
+#
+# Release: bump "version" in package.json + CHANGELOG, commit, then
+#   git tag v3.11.0 && git push origin v3.11.0
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: marketplace
+    permissions:
+      contents: read
+      id-token: write   # OIDC token for Marketplace Trusted Publishing
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Check the tag matches package.json
+        run: |
+          PKG="v$(node -p "require('./package.json').version")"
+          if [ "$PKG" != "${GITHUB_REF_NAME}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package.json ${PKG}" >&2
+            exit 1
+          fi
+
+      - run: npm run compile
+
+      - name: Package VSIX
+        run: npx @vscode/vsce package --out "sendtoai-${GITHUB_REF_NAME#v}.vsix"
+
+      - name: Publish to Visual Studio Marketplace (Trusted Publishing)
+        run: npx @vscode/vsce publish --oidc --packagePath "sendtoai-${GITHUB_REF_NAME#v}.vsix"
+
+      - name: Publish to Open VSX
+        if: ${{ env.OVSX_PAT != '' }}
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: npx ovsx publish "sendtoai-${GITHUB_REF_NAME#v}.vsix"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sendtoai-release-vsix
+          path: '*.vsix'

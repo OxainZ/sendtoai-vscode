@@ -1,8 +1,8 @@
 {
     "name": "sendtoai",
-    "displayName": "Send to AI \u2014 Copy Your Whole Project or Codebase into ChatGPT, Claude & Gemini",
-    "description": "Copy your entire project, codebase or repo context into any AI chat in one click. Bundle your errors + the connected code into one paste-ready block \u2014 then paste the reply back and apply the edits to your files. No API key. Free tier bundles the 50 most relevant files; Pro bundles the whole project.",
-    "version": "3.10.0",
+    "displayName": "Send to AI — Copy Your Whole Project or Codebase into ChatGPT, Claude & Gemini",
+    "description": "Copy your entire project, codebase or repo context into any AI chat in one click. Bundle your errors + the connected code into one paste-ready block — then paste the reply back and apply the edits to your files. No API key. Free tier bundles the 50 most relevant files; Pro bundles the whole project.",
+    "version": "3.11.0",
     "publisher": "oxainz",
     "icon": "resources/icon.png",
     "license": "MIT",
@@ -12,7 +12,8 @@
         "theme": "dark"
     },
     "engines": {
-        "vscode": "^1.74.0"
+        "vscode": "^1.74.0",
+        "node": ">=20"
     },
     "categories": [
         "AI",
@@ -57,10 +58,10 @@
     "main": "./out/extension.js",
     "repository": {
         "type": "git",
-        "url": "https://github.com/oxainz/sendtoai-vscode"
+        "url": "https://github.com/OxainZ/sendtoai-vscode"
     },
     "bugs": {
-        "url": "https://github.com/oxainz/sendtoai-vscode/issues"
+        "url": "https://github.com/OxainZ/sendtoai-vscode/issues"
     },
     "homepage": "https://sendtoai.dev",
     "contributes": {
@@ -85,37 +86,37 @@
         "commands": [
             {
                 "command": "sendtoai.sendToAI",
-                "title": "\ud83d\udccb Send to AI",
+                "title": "📋 Send to AI",
                 "category": "Send to AI"
             },
             {
                 "command": "sendtoai.bundleProject",
-                "title": "\ud83d\ude80 Bundle Project for AI",
+                "title": "🚀 Bundle Project for AI",
                 "category": "Send to AI"
             },
             {
                 "command": "sendtoai.bundleErrors",
-                "title": "\ud83d\udc1b Bundle Errors for AI",
+                "title": "🐛 Bundle Errors for AI",
                 "category": "Send to AI"
             },
             {
                 "command": "sendtoai.applyResponse",
-                "title": "\ud83d\udce5 Apply AI Response (paste-back)",
+                "title": "📥 Apply AI Response (paste-back)",
                 "category": "Send to AI"
             },
             {
                 "command": "sendtoai.upgradeToPro",
-                "title": "\ud83d\udc8e Upgrade to Pro ($9 lifetime)",
+                "title": "💎 Upgrade to Pro ($9 lifetime)",
                 "category": "Send to AI"
             },
             {
                 "command": "sendtoai.enterLicenseKey",
-                "title": "\ud83d\udd11 Enter License Key",
+                "title": "🔑 Enter License Key",
                 "category": "Send to AI"
             },
             {
                 "command": "sendtoai.deactivateLicense",
-                "title": "\ud83d\udd13 Deactivate License on This Machine",
+                "title": "🔓 Deactivate License on This Machine",
                 "category": "Send to AI"
             }
         ],
@@ -157,8 +158,9 @@
                 "sendtoai.licenseKey": {
                     "type": "string",
                     "default": "",
-                    "description": "Pro license key (purchase at https://sendtoai.dev for $9 lifetime)",
-                    "pattern": "^([A-Z0-9]{8}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{12})?$"
+                    "description": "Pro license key (purchase at https://sendtoai.dev). Stored per machine and never synced by Settings Sync — each machine activates its own slot.",
+                    "pattern": "^([A-Za-z0-9]{8}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{12})?$",
+                    "scope": "machine"
                 },
                 "sendtoai.autoOpenAI": {
                     "type": "boolean",
@@ -182,7 +184,7 @@
         "ovsx": "^0.10.1"
     },
     "overrides": {
-        "undici": ">=7.28.0",
+        "undici": ">=7.31.0",
         "markdown-it": ">=14.1.0"
     }
 }

@@ -75,6 +75,7 @@ Works with **any** AI you already use — it's a companion to your existing chat
 - **🎯 Fit to AI Window** — auto-trim to your AI's context using relevance
   ranking + dependency-graph awareness (keeps what matters, not the biggest files)
 - **📋 Named presets** (up to 10) — one-click reload of "backend only" etc.
+- Use it on up to **5 machines** — run *Deactivate License on This Machine* to move a slot
 - All future Pro features included
 
 **[🚀 Upgrade — $9 lifetime](https://sendtoai.dev)** · No subscription. 14-day money-back guarantee.
@@ -146,8 +147,10 @@ Output formats include an **XML** mode tuned for Claude and structured analysis,
 
 ## 🔒 Privacy & security
 
-- ✅ **Zero data collection** — your code stays on your machine
-- ✅ **No telemetry** — all bundling happens locally
+- ✅ **Your code stays on your machine** — bundling is 100% local; the only place it goes is the clipboard, and from there to whichever AI *you* paste it into
+- ✅ **No telemetry, no analytics** — the free tier makes zero network calls
+- ✅ **Pro license check is the one exception** — with a key set, the extension verifies it against api.lemonsqueezy.com (sends the key plus an anonymised machine identifier, cached for 24 hours). Nothing about your code is included
+- ✅ **Secrets are never bundled** — `.env*`, private keys and certificates (`.pem`, `.key`, `.p12`…), `.npmrc`/`.netrc`, cloud credential files and Terraform state are always skipped, symlinks are never followed, and files over 1 MB are left out
 - ✅ **0 known vulnerabilities** — dependencies patched and pinned (`npm audit` clean)
 - ✅ **Open source** — audit it yourself
 
@@ -166,8 +169,9 @@ Output formats include an **XML** mode tuned for Claude and structured analysis,
 ## 📞 Support
 
 - 🌐 **Website**: [sendtoai.dev](https://sendtoai.dev)
-- 🐛 **Found a bug?** [Open an issue](https://github.com/oxainz/sendtoai-vscode/issues)
+- 🐛 **Found a bug?** [Open an issue](https://github.com/OxainZ/sendtoai-vscode/issues)
 - 💬 **Need help?** support@sendtoai.dev
+- 💳 **Billing & refunds**: 14-day no-questions refund — email support@sendtoai.dev with your order number. Purchases are processed by Lemon Squeezy, so your receipt and card statement say **"Sold through Link, LLC"**
 - ⭐ **Love it?** [Rate it 5 stars](https://marketplace.visualstudio.com/items?itemName=oxainz.sendtoai&ssr=false#review-details)
 
 ## 📄 License

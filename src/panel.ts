@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as crypto from 'crypto';
 import { BundleResult, FileNode } from './bundler';
 import { CostEstimate } from './costEstimator';
 
@@ -168,10 +169,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
   }
 
   private _getNonce(): string {
-    let text = '';
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    for (let i = 0; i < 32; i++) { text += chars.charAt(Math.floor(Math.random() * chars.length)); }
-    return text;
+    return crypto.randomBytes(16).toString('hex');
   }
 
   private _html(): string {
@@ -489,7 +487,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
     <option value="0">No limit (bundle all selected)</option>
     <option value="8000">ChatGPT Free — 8K tokens</option>
     <option value="32000">ChatGPT Plus — 32K tokens</option>
-    <option value="200000">Claude — 200K tokens</option>
+    <option value="1000000">Claude — 1M tokens</option>
     <option value="1000000">Gemini — 1M tokens</option>
   </select>
 </div>
@@ -553,22 +551,22 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
     <div class="bar-bg"><div class="bar-fill" id="barGptFree" style="width:0%"></div></div>
     <div class="ctx-row"><span class="ctx-lbl">ChatGPT Plus</span><span class="ctx-limit">32K</span><span class="ctx-pct" id="pctGptPlus">0%</span></div>
     <div class="bar-bg"><div class="bar-fill" id="barGptPlus" style="width:0%"></div></div>
-    <div class="ctx-row"><span class="ctx-lbl">Claude</span><span class="ctx-limit">200K</span><span class="ctx-pct" id="pctClaude">0%</span></div>
+    <div class="ctx-row"><span class="ctx-lbl">Claude</span><span class="ctx-limit">1M</span><span class="ctx-pct" id="pctClaude">0%</span></div>
     <div class="bar-bg"><div class="bar-fill" id="barClaude" style="width:0%"></div></div>
     <div class="ctx-row"><span class="ctx-lbl">Gemini</span><span class="ctx-limit">1M</span><span class="ctx-pct" id="pctGemini">0%</span></div>
     <div class="bar-bg"><div class="bar-fill" id="barGemini" style="width:0%"></div></div>
   </div>
   <div class="cost-card">
     <div class="cost-title">Cost per send</div>
-    <div class="stat-row"><span class="stat-lbl">Haiku 4.5</span><span class="stat-val" id="ch">—</span></div>
-    <div class="stat-row"><span class="stat-lbl">Sonnet 4.6</span><span class="stat-val" id="cs">—</span></div>
-    <div class="stat-row"><span class="stat-lbl">Opus 4.6</span><span class="stat-val" id="co">—</span></div>
+    <div class="stat-row"><span class="stat-lbl">Haiku 5.5</span><span class="stat-val" id="ch">—</span></div>
+    <div class="stat-row"><span class="stat-lbl">Sonnet 5.5</span><span class="stat-val" id="cs">—</span></div>
+    <div class="stat-row"><span class="stat-lbl">Opus 5.5</span><span class="stat-val" id="co">—</span></div>
   </div>
   <div id="typeWrap" style="margin-bottom:8px">
     <div class="section-label">File types</div>
     <div class="types-wrap" id="typePills"></div>
   </div>
-  <div id="warnBox" style="display:none" class="warn">⚠️ Large bundle — consider Sonnet 4.6 or Opus (support 1M context)</div>
+  <div id="warnBox" style="display:none" class="warn">⚠️ Large bundle — consider Sonnet 5.5 or Opus 5.5 (1M context)</div>
   <button class="btn-copy" data-act="send" data-arg="copyAgain">📋 Copy Again</button>
   <p class="timestamp" id="ts"></p>
 </div>
@@ -1017,7 +1015,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
     }
     setBar('barGptFree', 'pctGptFree', 8000);
     setBar('barGptPlus', 'pctGptPlus', 32000);
-    setBar('barClaude',  'pctClaude',  200000);
+    setBar('barClaude',  'pctClaude',  1000000);
     setBar('barGemini',  'pctGemini',  1000000);
 
     const pills = document.getElementById('typePills');

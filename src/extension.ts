@@ -18,6 +18,11 @@ const CACHE_TTL_MS        = 24 * 60 * 60 * 1000;
 const WARN_AFTER_MS       = 30 * 24 * 60 * 60 * 1000;
 const HARD_BLOCK_AFTER_MS = 365 * 24 * 60 * 60 * 1000;
 const SECRETS_KEY         = 'sendtoai.activation';
+const MAX_RESPONSE_BYTES  = 256 * 1024;
+// Files that execute on install / open / commit. An AI reply can be steered by
+// prompt injection hidden in a bundled file, so edits to these are never
+// pre-ticked in the Apply AI Reply picker.
+const SENSITIVE_WRITE_RE = /(^|\/)(package\.json|\.npmrc|\.yarnrc(?:\.yml)?|Makefile)$|(^|\/)(\.husky|\.github|\.vscode|\.git)\/|\.(sh|ps1|bat|cmd)$/i;
 
 const LICENSE_RE = /^[A-Z0-9]{8}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{12}$/i;
 
@@ -49,10 +54,18 @@ function lsPost(path: string, body: object): Promise<any> {
         'Content-Length': Buffer.byteLength(bodyStr),
       },
     }, (res: import('http').IncomingMessage) => {
+      const status = res.statusCode ?? 0;
       let data = '';
-      res.on('data', (chunk: Buffer) => { data += chunk; });
+      res.on('data', (chunk: Buffer) => {
+        data += chunk;
+        if (data.length > MAX_RESPONSE_BYTES) { req.destroy(new Error('Response too large')); }
+      });
       res.on('error', reject);
       res.on('end', () => {
+        // 5xx / 429 are server-side trouble, not a verdict on the key. Surface
+        // them as a network error so the caller falls back to the cached state
+        // instead of caching valid:false for a day.
+        if (status >= 500 || status === 429) { reject(new Error(`HTTP ${status}`)); return; }
         try { resolve(JSON.parse(data)); }
         catch { reject(new Error('Invalid JSON')); }
       });
@@ -90,7 +103,9 @@ async function activateLicense(key: string, context: vscode.ExtensionContext): P
 
 // Returns true=valid, false=invalid/limit, null=network error
 async function checkLicenseRemote(key: string, context: vscode.ExtensionContext): Promise<boolean | null> {
-  const storedStr = await context.secrets.get(SECRETS_KEY);
+  let storedStr: string | undefined;
+  try { storedStr = await context.secrets.get(SECRETS_KEY); }
+  catch { return null; } // keychain unavailable: treat like offline, never as "invalid"
 
   if (!storedStr) {
     // No stored activation — activate this machine
@@ -145,8 +160,11 @@ async function refreshLicense(
 
   const cache = context.globalState.get<LicenseCache>('sendtoai.licenseCache');
   const now = Date.now();
+  // A cache stamped in the future means the clock was rolled back (or the cache
+  // was hand-edited). Don't trust it: re-verify now, and fail closed if offline.
+  const clockRolledBack = !!cache && cache.checkedAt > now + 60_000;
 
-  if (!force && cache && cache.key === key && (now - cache.checkedAt) < CACHE_TTL_MS) {
+  if (!force && !clockRolledBack && cache && cache.key === key && (now - cache.checkedAt) < CACHE_TTL_MS) {
     cachedProStatus = cache.valid;
     return cache.valid;
   }
@@ -155,7 +173,7 @@ async function refreshLicense(
 
   if (remote === null) {
     // Network error — keep Pro if previously confirmed valid
-    if (cache && cache.key === key && cache.valid) {
+    if (cache && cache.key === key && cache.valid && !clockRolledBack) {
       const offlineMs = now - (cache.lastValidAt ?? cache.checkedAt);
       if (offlineMs > HARD_BLOCK_AFTER_MS) {
         cachedProStatus = false;
@@ -209,8 +227,14 @@ function parseFileBlocks(text: string): { path: string; content: string }[] {
       pending = '';
       continue;
     }
-    const tok = extractPathToken(lines[i]);
-    if (tok) { pending = tok; }
+    const line = lines[i];
+    if (line.trim() === '') { continue; } // blank lines keep a pending label alive
+    const tok = extractPathToken(line);
+    // Only a line that is essentially JUST the path counts as a label
+    // (**src/a.ts**, `src/a.ts`, File: src/a.ts). A prose sentence that happens
+    // to contain "e.g." or "Node.js" must never become a target file.
+    const cleaned = line.replace(/[*`>#]/g, '').replace(/^\s*(?:file|path)\s*:/i, '').trim();
+    pending = (tok && cleaned.length <= tok.length + 24) ? tok : '';
   }
   return out;
 }
@@ -270,7 +294,11 @@ export function activate(context: vscode.ExtensionContext) {
   // ── Scan ──────────────────────────────────────────────────────────────────
   panel.onScanRequest(async () => {
     const root = vscode.workspace.workspaceFolders?.[0]?.uri;
-    if (!root) { return; }
+    if (!root) {
+      // No folder open: answer with an empty tree so the panel stops spinning
+      panel.updateTree({ name: '', path: '', isDir: true, tokenEst: 0, children: [] });
+      return;
+    }
     try {
       const tree = await scanProjectTree(root);
       panel.updateTree(tree);
@@ -518,11 +546,23 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showWarningMessage('SendToAI: All file paths in the reply point outside the workspace — nothing to apply.');
         return;
       }
-      const items = await Promise.all([...byPath.entries()].map(async ([p, c]) => {
+      const rootFs = root.fsPath.replace(/[\\/]+$/, '');
+      const candidates = await Promise.all([...byPath.entries()].map(async ([p, c]) => {
+        const uri = vscode.Uri.joinPath(root, p);
+        // Belt and braces: the resolved path must still live under the workspace
+        const rel = path.relative(rootFs, uri.fsPath);
+        if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) { return null; }
         let exists = true;
-        try { await vscode.workspace.fs.stat(vscode.Uri.joinPath(root, p)); } catch { exists = false; }
-        return { label: p, description: `${c.split('\n').length} lines · ${exists ? 'modify' : 'new file'}`, picked: true, p, c };
+        try { await vscode.workspace.fs.stat(uri); } catch { exists = false; }
+        const sensitive = SENSITIVE_WRITE_RE.test(p);
+        const flag = sensitive ? ' · ⚠ review before applying' : '';
+        return { label: p, description: `${c.split('\n').length} lines · ${exists ? 'modify' : 'new file'}${flag}`, picked: !sensitive, p, c };
       }));
+      const items = candidates.filter((it): it is NonNullable<typeof it> => it !== null);
+      if (items.length === 0) {
+        vscode.window.showWarningMessage('SendToAI: All file paths in the reply point outside the workspace — nothing to apply.');
+        return;
+      }
       const picked = await vscode.window.showQuickPick(items, {
         canPickMany: true,
         title: `SendToAI: apply ${items.length} AI edit(s)?`,
@@ -574,20 +614,32 @@ export function activate(context: vscode.ExtensionContext) {
 
       const validating = vscode.window.setStatusBarMessage('SendToAI: Activating license…');
       try {
-        // Free the old slot first (best-effort): re-activating creates a NEW
-        // instance server-side, so deleting the old one without deactivating
-        // burned one of the 5 activation slots on every key re-entry.
+        // Order matters: activate the NEW key first, and only then release the
+        // old instance. Deleting the old activation before the new one succeeded
+        // orphaned this machine's own slot whenever activation failed (limit
+        // reached, network blip), and an orphaned slot can never be freed again.
         const oldStr = await context.secrets.get(SECRETS_KEY);
-        if (oldStr) {
+        const oldKey = getLicenseKey();
+        if (oldStr && oldKey === inputKey) {
+          // Same key re-entered: re-validate the existing activation, don't burn a slot.
+          validating.dispose();
+          const valid = await refreshLicense(inputKey, context, true);
+          panel.sendProStatus(valid);
+          vscode.window.showInformationMessage(valid
+            ? '\uD83C\uDF89 License verified! PRO features enabled.'
+            : 'SendToAI: License key is invalid, expired, or this activation no longer exists.');
+          return;
+        }
+        const result = await activateLicense(inputKey, context);
+        if (result !== null && result.ok && oldStr) {
+          // New key is active and stored — free the previous key's slot (best-effort)
           try {
             const old: StoredActivation = JSON.parse(oldStr);
-            await lsPost('/v1/licenses/deactivate', {
-              license_key: inputKey, instance_id: old.instanceId,
-            });
-          } catch { /* wrong key for that instance, or offline — nothing to free */ }
+            if (LICENSE_RE.test(oldKey)) {
+              await lsPost('/v1/licenses/deactivate', { license_key: oldKey, instance_id: old.instanceId });
+            }
+          } catch { /* offline or already gone — nothing to free */ }
         }
-        await context.secrets.delete(SECRETS_KEY);
-        const result = await activateLicense(inputKey, context);
         validating.dispose();
 
         if (result === null) {
