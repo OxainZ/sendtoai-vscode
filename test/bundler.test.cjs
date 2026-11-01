@@ -79,7 +79,7 @@ test('estimateTokens is monotonic and roughly chars/4', () => {
   const a = estimateTokens('x'.repeat(400));
   const b = estimateTokens('x'.repeat(800));
   assert.ok(a > 0 && b > a);
-  assert.ok(Math.abs(a - 100) <= 20);
+  assert.ok(a >= 100 && a <= 135, 'code is denser than 4 chars/token; estimate leans high');
 });
 
 const { decodeText } = require('../out/bundler.js');

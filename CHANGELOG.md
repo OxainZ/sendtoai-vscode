@@ -3,6 +3,20 @@
 All notable changes to **Send to AI** are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [3.15.0] — 2026-11-02
+
+### Changed
+- **Context presets match late-2026 reality**: ChatGPT Free 27K, Plus/Go 54K
+  instant or 256K thinking, Pro 128K; Gemini Free 32K, AI Pro 1M; Claude 200K
+  or 1M by model; DeepSeek 1M. The old 8K/32K ChatGPT figures were a year
+  stale. Context bars updated to match.
+- The panel notes that long pastes become attachments in ChatGPT and Claude,
+  which is expected behaviour, not an error.
+- **Token estimates lean high for code** (3.3 chars per token instead of 4),
+  reflecting current tokenizers; Fit to AI Window is safer as a result.
+- Listing: shorter title ("Copy Codebase to ChatGPT, Claude & Gemini"),
+  hook-first description, keywords reallocated to the phrases people search.
+
 ## [3.14.0] — 2026-11-01
 
 ### Fixed

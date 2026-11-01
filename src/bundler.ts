@@ -481,8 +481,13 @@ export interface BundleResult {
   trimmedFrom?:  number;
 }
 
+// Vendors quote ~4 chars/token for English prose; measured code runs closer to
+// 2.7-3.5 on current OpenAI/Gemini tokenizers, and Anthropic says Claude 4.7+
+// uses ~30% more tokens than earlier models. 3.3 keeps the estimate on the
+// safe (high) side for fit-to-window without being alarmist.
+export const CHARS_PER_TOKEN = 3.3;
 export function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
+  return Math.ceil(text.length / CHARS_PER_TOKEN);
 }
 
 // ── Visual file-picker types & scanner ────────────────────────────────────────
@@ -530,7 +535,7 @@ export async function scanProjectTree(rootUri: vscode.Uri): Promise<FileNode> {
       } else {
         let sizeBytes = 0;
         try { sizeBytes = (await vscode.workspace.fs.stat(childUri)).size; } catch { /* ignore */ }
-        const tokenEst = Math.ceil(sizeBytes / 4);
+        const tokenEst = Math.ceil(sizeBytes / CHARS_PER_TOKEN);
         node.tokenEst += tokenEst;
         node.children.push({ name: childName, path: childRel, isDir: false, tokenEst, children: [] });
       }
