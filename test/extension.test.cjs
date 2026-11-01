@@ -41,3 +41,16 @@ test('estimateCost uses 2026 list prices and the Haiku long-prompt tier', () => 
   assert.equal(big.haiku, '$0.100', '200K tokens at $0.50/M');
   assert.equal(big.opus, '$0.800');
 });
+
+const { cacheSignature, cacheIsAuthentic } = require('../out/extension.js');
+
+test('license cache signature detects tampering and rejects unsigned caches', () => {
+  const secret = 'abc123';
+  const c = { key: 'AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE', valid: false, checkedAt: 1000, lastValidAt: 0 };
+  const signed = { ...c, sig: cacheSignature(secret, c) };
+  assert.equal(cacheIsAuthentic(secret, signed), true);
+  assert.equal(cacheIsAuthentic(secret, { ...signed, valid: true }), false, 'flipping valid must invalidate');
+  assert.equal(cacheIsAuthentic(secret, { ...signed, checkedAt: 9_999_999_999 }), false, 'future timestamp must invalidate');
+  assert.equal(cacheIsAuthentic('other', signed), false, 'different secret');
+  assert.equal(cacheIsAuthentic(secret, c), false, 'unsigned cache is never trusted');
+});

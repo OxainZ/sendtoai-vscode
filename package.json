@@ -2,7 +2,7 @@
     "name": "sendtoai",
     "displayName": "Send to AI — Copy Your Whole Project or Codebase into ChatGPT, Claude & Gemini",
     "description": "Copy your entire project, codebase or repo context into any AI chat in one click. Bundle your errors + the connected code into one paste-ready block — then paste the reply back and apply the edits to your files. No API key. Free tier bundles the 50 most relevant files; Pro bundles the whole project.",
-    "version": "3.11.1",
+    "version": "3.12.0",
     "publisher": "oxainz",
     "icon": "resources/icon.png",
     "license": "MIT",
@@ -118,6 +118,11 @@
                 "command": "sendtoai.deactivateLicense",
                 "title": "🔓 Deactivate License on This Machine",
                 "category": "Send to AI"
+            },
+            {
+                "command": "sendtoai.showLicenseActivity",
+                "title": "📜 Show License Activity",
+                "category": "Send to AI"
             }
         ],
         "keybindings": [
@@ -188,5 +193,15 @@
     "overrides": {
         "undici": ">=7.31.0",
         "markdown-it": ">=14.1.0"
+    },
+    "capabilities": {
+        "untrustedWorkspaces": {
+            "supported": "limited",
+            "description": "Bundling and copying work in Restricted Mode. Apply AI Reply, which writes files, requires a trusted workspace."
+        },
+        "virtualWorkspaces": {
+            "supported": "limited",
+            "description": "Needs a local or remote file system to read files."
+        }
     }
 }
