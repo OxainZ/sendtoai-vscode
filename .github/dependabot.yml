@@ -15,6 +15,9 @@ updates:
       # to package. @types/node tracks the extension host's Node, not latest.
       - dependency-name: '*'
         update-types: ['version-update:semver-major']
+      # @types/vscode must stay at the engines.vscode minimum (^1.74): any bump
+      # makes vsce refuse to package. Raise it by hand together with engines.
+      - dependency-name: '@types/vscode'
 
   - package-ecosystem: npm
     directory: /worker
