@@ -2,7 +2,7 @@
     "name": "sendtoai",
     "displayName": "Send to AI — Copy Your Whole Project or Codebase into ChatGPT, Claude & Gemini",
     "description": "Copy your entire project, codebase or repo context into any AI chat in one click. Bundle your errors + the connected code into one paste-ready block — then paste the reply back and apply the edits to your files. No API key. Free tier bundles the 50 most relevant files; Pro bundles the whole project.",
-    "version": "3.13.0",
+    "version": "3.13.1",
     "publisher": "oxainz",
     "icon": "resources/icon.png",
     "license": "MIT",
@@ -233,15 +233,20 @@
         "compile": "tsc -p ./",
         "watch": "tsc -watch -p ./",
         "publish:ovsx": "npx ovsx publish -p $OVSX_TOKEN",
-        "test": "npm run compile && node --test test/bundler.test.cjs test/extension.test.cjs",
-        "test:worker": "cd worker && node --test test/index.test.js"
+        "test": "npm run compile && node --check media/panel.js && node --test test/bundler.test.cjs test/extension.test.cjs test/panel.test.cjs",
+        "test:worker": "cd worker && node --test test/index.test.js",
+        "lint": "eslint ."
     },
     "devDependencies": {
+        "@eslint/js": "^9.39.5",
         "@types/node": "16.x",
         "@types/vscode": "^1.74.0",
         "@vscode/vsce": "^4.1.0",
+        "eslint": "^9.39.5",
+        "globals": "^15.15.0",
         "ovsx": "^0.10.1",
-        "typescript": "^4.9.4"
+        "typescript": "^4.9.4",
+        "typescript-eslint": "^8.72.1"
     },
     "overrides": {
         "undici": ">=7.31.0",

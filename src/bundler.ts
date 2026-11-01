@@ -783,7 +783,7 @@ export async function buildBundle(
       ...f,
       est: Math.ceil(f.content.length / 4) + PER_FILE_TOKENS,
     }));
-    let total = withTok.reduce((s, f) => s + f.est, 0) + FIXED_OVERHEAD;
+    const total = withTok.reduce((s, f) => s + f.est, 0) + FIXED_OVERHEAD;
 
     if (total > tokenLimit) {
       // SMART SELECTION (the differentiator): rank every file by relevance to

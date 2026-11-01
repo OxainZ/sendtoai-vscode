@@ -3,6 +3,24 @@
 All notable changes to **Send to AI** are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [3.13.1] — 2026-11-01
+
+**Hotfix: the side panel did not load in 3.11.1, 3.12.0 and 3.13.0.**
+
+### Fixed
+- The panel's script contained a regex that, once rendered through the
+  TypeScript template literal, was a JavaScript syntax error, so the whole
+  panel was inert (no file tree, no bundle button). Commands from the Command
+  Palette and keyboard shortcuts were unaffected. Introduced in the
+  unpublished 3.10.0; shipped today; fixed within hours.
+
+### Changed
+- The panel's CSS and script now live in `media/panel.css` and
+  `media/panel.js` as real files loaded under the same nonce-locked CSP,
+  instead of a 900-line template string. A test parses the script and checks
+  the CSP wiring on every build, and ESLint now covers the extension, the
+  webview script, the Worker and the tests in CI.
+
 ## [3.13.0] — 2026-11-01
 
 ### Added
