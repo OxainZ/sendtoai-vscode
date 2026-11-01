@@ -688,26 +688,33 @@ export async function buildBundle(
     progress.report({ message: rel, increment: perStep });
     let content: string;
     try {
-      const size = (await vscode.workspace.fs.stat(uri)).size;
-      if (size > MAX_FILE_BYTES) {
-        return { rel, content: `[Skipped — ${size.toLocaleString()} bytes exceeds the ${MAX_FILE_BYTES / 1_000_000} MB per-file limit]` };
-      }
-      const bytes = await vscode.workspace.fs.readFile(uri);
-      // Scan all bytes — file is already in memory, no reason to cap at 8192
-      let binary = false;
-      for (let i = 0; i < bytes.length; i++) {
-        if (bytes[i] === 0) { binary = true; break; }
-      }
-      if (binary) {
-        content = `[Binary file — ${bytes.length.toLocaleString()} bytes — skipped]`;
+      let text: string;
+      // An unsaved editor buffer is what the user is looking at (and what the
+      // Problems panel's line numbers refer to), so it beats the file on disk.
+      const dirty = vscode.workspace.textDocuments.find(d =>
+        d.isDirty && d.uri.scheme === 'file' && d.uri.fsPath === uri.fsPath);
+      if (dirty) {
+        text = dirty.getText();
       } else {
-        let text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
-        if (format === 'compact' || format === 'minimal') {
-          const ext = path.extname(uri.fsPath).toLowerCase();
-          text = compactSource(text, ext);
+        const size = (await vscode.workspace.fs.stat(uri)).size;
+        if (size > MAX_FILE_BYTES) {
+          return { rel, content: `[Skipped — ${size.toLocaleString()} bytes exceeds the ${MAX_FILE_BYTES / 1_000_000} MB per-file limit]` };
         }
-        content = text;
+        const bytes = await vscode.workspace.fs.readFile(uri);
+        // Scan all bytes — file is already in memory, no reason to cap at 8192
+        let binary = false;
+        for (let i = 0; i < bytes.length; i++) {
+          if (bytes[i] === 0) { binary = true; break; }
+        }
+        if (binary) {
+          return { rel, content: `[Binary file — ${bytes.length.toLocaleString()} bytes — skipped]` };
+        }
+        text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
       }
+      if (format === 'compact' || format === 'minimal') {
+        text = compactSource(text, path.extname(uri.fsPath).toLowerCase());
+      }
+      content = text;
     } catch (e: unknown) {
       content = `[Error: ${e instanceof Error ? e.message : String(e)}]`;
     }

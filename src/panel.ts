@@ -977,6 +977,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
     }
     if (d.command === 'scanResult') {
       treeData  = d.tree;
+      if (d.tree && d.tree.name) { document.getElementById('projName').textContent = '📁 ' + d.tree.name; }
       pathToTok.clear();
       precomputeDescendants(treeData); // builds descCache, countCache, pathToTok in O(n)
       totalCount = totalFileCount(treeData);

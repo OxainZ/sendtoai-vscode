@@ -3,6 +3,16 @@
 All notable changes to **Send to AI** are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [3.13.0] — 2026-11-01
+
+### Added
+- **Getting-started walkthrough** (Help > Get Started > Send to AI in 60 seconds): open the panel, bundle, fix errors, apply the reply.
+- **Multi-root workspaces**: the panel follows the folder that owns the active editor; notes and presets are per folder.
+
+### Fixed
+- Bundles use **unsaved editor buffers** when a file is dirty, so Bundle Errors line numbers match what is on screen.
+- The panel header shows the folder name as soon as the scan finishes.
+
 ## [3.12.0] — 2026-11-01
 
 **Licensing that survives real life, plus dispute evidence.**

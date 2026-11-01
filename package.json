@@ -2,7 +2,7 @@
     "name": "sendtoai",
     "displayName": "Send to AI — Copy Your Whole Project or Codebase into ChatGPT, Claude & Gemini",
     "description": "Copy your entire project, codebase or repo context into any AI chat in one click. Bundle your errors + the connected code into one paste-ready block — then paste the reply back and apply the edits to your files. No API key. Free tier bundles the 50 most relevant files; Pro bundles the whole project.",
-    "version": "3.12.0",
+    "version": "3.13.0",
     "publisher": "oxainz",
     "icon": "resources/icon.png",
     "license": "MIT",
@@ -173,7 +173,60 @@
                     "description": "Automatically open AI chat interface after copying content"
                 }
             }
-        }
+        },
+        "walkthroughs": [
+            {
+                "id": "sendtoai.gettingStarted",
+                "title": "Send to AI in 60 seconds",
+                "description": "Bundle your code, paste it into any AI chat, paste the reply back.",
+                "steps": [
+                    {
+                        "id": "open",
+                        "title": "Open the panel",
+                        "description": "Send to AI lives in the Activity Bar. The panel scans your project and lets you tick the files that matter.\n[Open the panel](command:sendtoai.panel.focus)",
+                        "media": {
+                            "markdown": "media/walkthrough/open.md"
+                        },
+                        "completionEvents": [
+                            "onView:sendtoai.panel"
+                        ]
+                    },
+                    {
+                        "id": "bundle",
+                        "title": "Bundle and paste",
+                        "description": "Click **Bundle to Clipboard**, then paste into ChatGPT, Claude or Gemini. The free tier bundles the 50 most relevant files; Pro bundles everything.\n[Bundle the current project](command:sendtoai.bundleProject)",
+                        "media": {
+                            "markdown": "media/walkthrough/bundle.md"
+                        },
+                        "completionEvents": [
+                            "onCommand:sendtoai.bundleProject"
+                        ]
+                    },
+                    {
+                        "id": "errors",
+                        "title": "Fix a wall of errors in one paste",
+                        "description": "Bundle Errors reads the Problems panel and packs every file with a diagnostic, plus the diagnostics themselves, into one prompt.\n[Bundle Errors](command:sendtoai.bundleErrors)",
+                        "media": {
+                            "markdown": "media/walkthrough/errors.md"
+                        },
+                        "completionEvents": [
+                            "onCommand:sendtoai.bundleErrors"
+                        ]
+                    },
+                    {
+                        "id": "apply",
+                        "title": "Apply the reply",
+                        "description": "Copy the AI's full reply, then run Apply AI Reply. Every file block becomes an edit you can review and undo.\n[Apply AI Reply](command:sendtoai.applyResponse)",
+                        "media": {
+                            "markdown": "media/walkthrough/apply.md"
+                        },
+                        "completionEvents": [
+                            "onCommand:sendtoai.applyResponse"
+                        ]
+                    }
+                ]
+            }
+        ]
     },
     "scripts": {
         "vscode:prepublish": "npm run compile",
