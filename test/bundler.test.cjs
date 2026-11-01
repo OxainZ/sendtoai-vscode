@@ -95,3 +95,14 @@ test('decodeText: UTF-8, UTF-8 BOM, UTF-16 LE/BE by BOM, binary -> null', () => 
   assert.equal(decodeText(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01])), null, 'NUL without BOM is binary');
   assert.equal(decodeText(new Uint8Array([])), '');
 });
+
+test('gitignore compilation refuses patterns that would backtrack', () => {
+  assert.equal(compilePattern('**/'.repeat(12) + 'x') !== null, true, 'runs of **/ collapse to one');
+  assert.equal(compilePattern('a*a*a*a*a*a*a*a*a*a*b'), null, 'too many wildcards');
+  assert.equal(compilePattern('x'.repeat(300)), null, 'too long');
+  const r = compilePattern('**/'.repeat(12) + 'x');
+  const deep = Array(80).fill('d').join('/') + '/x';
+  const t0 = Date.now();
+  for (let i = 0; i < 200; i++) { matchesGitignore('x', [r], deep); }
+  assert.ok(Date.now() - t0 < 500, 'deep paths must match in linear time');
+});

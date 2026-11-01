@@ -3,12 +3,41 @@
 All notable changes to **Send to AI** are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
-## [3.15.1] — 2026-11-02
+## [3.15.2] — 2026-11-02
+
+**Second independent audit; everything it found is fixed.**
+
+### Fixed
+- Free users who picked Git Changes or a Fit to AI Window preset once were
+  told "a bundle is already in progress" on every later click until reload.
+- **Apply AI Reply now saves the files it changes.** It used to leave them as
+  unsaved editor buffers (and a 0-byte new file on disk), so "visible in git
+  diff" was not true until you saved by hand. It also bases SEARCH/REPLACE on
+  the editor buffer instead of the disk, so unsaved edits are never discarded,
+  keeps each file's own line endings, applies SEARCH/REPLACE blocks that
+  follow a full-file block of the same file, relativises absolute or
+  machine-specific paths from the reply, leaves replies that were cut off
+  before a closing fence unticked, and names the file if a write did not
+  land.
+- Fit to AI Window measured files with the old 4-chars-per-token rule while
+  the rest of the extension uses 3.3, so a "27K" bundle could show as OVER.
+- If VS Code's secret storage is unavailable, a fresh activation is released
+  immediately instead of being orphaned on every retry.
+- Re-entering a key after the setting was blanked re-uses the stored
+  activation instead of taking a new slot.
+- Adding or removing a workspace folder reloads notes and presets, not just
+  the tree.
+- The panel said Ctrl+Alt+A bundles; that shortcut copies the current file.
+  Ctrl+Alt+B is the bundle shortcut. README matched.
+- The `_test` hooks used by the test runner are no longer exported in normal
+  installs.
+
+## [3.15.1] — 2026-11-01
 
 ### Changed
 - README opens with a 15-second demo GIF of the full loop (scan, bundle, apply with diff preview). The GIF is recorded by a script (`npm run demo:record`) that drives a real VS Code, so it stays current with the UI.
 
-## [3.15.0] — 2026-11-02
+## [3.15.0] — 2026-11-01
 
 ### Added
 - **Apply AI Reply understands more reply shapes**: fences of any length (```` or ~~~),

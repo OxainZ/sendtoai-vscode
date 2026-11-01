@@ -60,15 +60,17 @@ export async function disableKeysForOrder(orderId, apiKey, fetchImpl = fetch) {
       headers,
       body: JSON.stringify({ data: { type: 'license-keys', id: String(key.id), attributes: { disabled: true } } }),
     });
-    results.push({ id: key.id, status: res.ok ? 'disabled' : `HTTP ${res.status}` });
+    // A key that is still enabled is a failure of the whole webhook, so the
+    // caller returns 500 and Lemon Squeezy retries instead of moving on.
+    if (!res.ok) { throw new Error(`disable license key ${key.id}: HTTP ${res.status}`); }
+    results.push({ id: key.id, status: 'disabled' });
   }
   return results;
 }
 
 /** Only a FULL refund revokes the key; a partial refund is a goodwill gesture. */
 export function isFullRefund(payload) {
-  const a = payload?.data?.attributes ?? {};
-  return a.status === 'refunded' || a.refunded === true;
+  return payload?.data?.attributes?.status === 'refunded';
 }
 
 function json(body, status = 200) {
@@ -100,7 +102,12 @@ export default {
     // dispute_created: a chargeback was opened. Lemon Squeezy will refund on
     // your behalf and charge the $15 fee either way, so revoke immediately.
     if (event === 'dispute_created') {
-      const disputedOrder = payload?.data?.attributes?.order_id ?? orderId;
+      const disputedOrder = payload?.data?.attributes?.order_id;
+      if (!disputedOrder) {
+        // Never fall back to the dispute's own id: that is not an order id.
+        console.error(JSON.stringify({ event, testMode, error: 'dispute payload has no order_id' }));
+        return json({ ok: false, error: 'dispute payload has no order_id' }, 400);
+      }
       try {
         const results = await disableKeysForOrder(disputedOrder, env.LS_API_KEY);
         console.log(JSON.stringify({ event, orderId: disputedOrder, testMode, results }));

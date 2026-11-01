@@ -8,6 +8,7 @@ import { BundleMode, OutputFormat } from './panel';
 
 const IGNORE_DIRS = new Set([
   'node_modules', '.git', 'dist', 'build', '.expo', 'out',
+  '.ssh', '.aws', '.kube', '.docker', '.gnupg', '.azure', '.gcloud',
   '.vscode-test', 'coverage', '.nyc_output', '__pycache__',
   '.pytest_cache', '.tox', 'target', 'vendor',
   '.next', '.nuxt', '.svelte-kit', '.turbo', '.vercel',
@@ -56,6 +57,7 @@ const SECRET_NAMES = new Set([
   'secrets.json', 'secrets.yml', 'secrets.yaml', 'secret.yml', 'secret.yaml',
   'kubeconfig', 'terraform.tfstate', 'terraform.tfstate.backup',
   '.boto', '.s3cfg', 'master.key', 'credentials.yml.enc',
+  '.pgpass', 'wp-config.php', 'database.yml', 'sftp-config.json', '.ftpconfig', '.envrc',
 ]);
 const SECRET_PREFIXES = ['id_rsa', 'id_dsa', 'id_ecdsa', 'id_ed25519'];
 
@@ -65,10 +67,12 @@ export const MAX_FILE_BYTES = 1_000_000;
 
 // ── .gitignore / .sendtoaiignore support ──────────────────────────────────────
 
+const MAX_IGNORE_LINES = 2000;
+
 async function loadIgnoreFile(rootUri: vscode.Uri, filename: string): Promise<string[]> {
   try {
     const bytes = await vscode.workspace.fs.readFile(vscode.Uri.joinPath(rootUri, filename));
-    return new TextDecoder().decode(bytes).split('\n')
+    return new TextDecoder().decode(bytes.subarray(0, 256 * 1024)).split('\n').slice(0, MAX_IGNORE_LINES)
       .map(l => l.trim())
       .filter(l => l && !l.startsWith('#')); // keep negation lines (!) — handled in matchesGitignore
   } catch { return []; }
@@ -83,7 +87,17 @@ interface CompiledRule {
   needsPath:   boolean; // anchored or has slash/globstar → match against relPath
 }
 
+export // Patterns come from the project's own .gitignore, i.e. untrusted input that
+// is compiled to regexes and run against every path on panel open. Keep them
+// small and simple so no pattern can make the scan super-linear.
+const MAX_PATTERN_LEN = 256;
+const MAX_WILDCARDS   = 8;
+
 export function compilePattern(raw: string): CompiledRule | null {
+  if (raw.length > MAX_PATTERN_LEN) { return null; }
+  // collapse runs of **/ (each one is "zero or more dirs", so one is enough)
+  raw = raw.replace(/(?:\*\*\/){2,}/g, '**/');
+  if ((raw.match(/[*?]/g) || []).length > MAX_WILDCARDS) { return null; }
   const isNeg    = raw.startsWith('!');
   const stripped = (isNeg ? raw.slice(1) : raw).replace(/\/$/, '');
   if (!stripped) { return null; }
@@ -178,6 +192,7 @@ export function shouldIgnore(name: string, isDir: boolean, gitignore: CompiledRu
   const ext = path.extname(name).toLowerCase();
   if (ext && IGNORE_EXTENSIONS.has(ext)) { return true; }
   if (name.endsWith('.lock')) { return true; }
+  if (lower.endsWith('-bundle.txt')) { return true; }   // our own "Save Bundle as .txt" output
   return false;
 }
 
@@ -818,7 +833,7 @@ export async function buildBundle(
 
     const withTok = fileContents.map(f => ({
       ...f,
-      est: Math.ceil(f.content.length / 4) + PER_FILE_TOKENS,
+      est: estimateTokens(f.content) + PER_FILE_TOKENS,
     }));
     const total = withTok.reduce((s, f) => s + f.est, 0) + FIXED_OVERHEAD;
 

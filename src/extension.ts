@@ -5,7 +5,8 @@ import * as os from 'os';
 import * as crypto from 'crypto';
 import { SendToAIPanel, PanelRequest } from './panel';
 import { buildBundle, scanProjectTree } from './bundler';
-import { parseReply, applySearchReplace } from './reply';
+import { parseReply, applySearchReplace, groupReplyEdits } from './reply';
+import { estimateTokens } from './bundler';
 import type { DemoAction } from './panel';
 import { estimateCost } from './costEstimator';
 
@@ -33,7 +34,8 @@ const MAX_RESPONSE_BYTES  = 256 * 1024;
 // Files that execute on install / open / commit. An AI reply can be steered by
 // prompt injection hidden in a bundled file, so edits to these are never
 // pre-ticked in the Apply AI Reply picker.
-const SENSITIVE_WRITE_RE = /(^|\/)(package\.json|\.npmrc|\.yarnrc(?:\.yml)?|Makefile)$|(^|\/)(\.husky|\.github|\.vscode|\.git)\/|\.(sh|ps1|bat|cmd)$/i;
+const SENSITIVE_WRITE_RE = /(^|\/)(package\.json|\.npmrc|\.yarnrc(?:\.yml)?|Makefile|Dockerfile|pyproject\.toml|setup\.py|\.gitignore|\.sendtoaiignore|\.pre-commit-config\.yaml|\.envrc|\.env(?:\.[^/]*)?|credentials\.json|secrets?\.ya?ml)$|(^|\/)(\.husky|\.github|\.vscode|\.git|\.devcontainer|\.ssh|\.aws)\/|\.(sh|ps1|bat|cmd|csproj|pem|key)$/i;
+const MAX_REPLY_CHARS = 4_000_000;   // a chat reply is never this long; a hostile clipboard might be
 
 const LICENSE_RE = /^[A-Z0-9]{8}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{12}$/i;
 
@@ -166,7 +168,16 @@ async function activateLicense(key: string, context: vscode.ExtensionContext): P
     }
 
     const activation: StoredActivation = { instanceId: json.instance.id, activatedAt: Date.now() };
-    await context.secrets.store(SECRETS_KEY, JSON.stringify(activation));
+    try {
+      await context.secrets.store(SECRETS_KEY, JSON.stringify(activation));
+    } catch {
+      // Keychain unavailable: release the slot we just took, or every retry
+      // would burn another one without anything to show for it.
+      try { await lsPost('/v1/licenses/deactivate', { license_key: key, instance_id: json.instance.id }); } catch { /* best effort */ }
+      void logLicense(context, 'activate.keychain-unavailable', 'activation released; VS Code secret storage is not working on this machine');
+      vscode.window.showErrorMessage('SendToAI: VS Code could not store the activation (secret storage unavailable). Pro stays off on this machine until it works.');
+      return { ok: false, limitReached: false };
+    }
     void logLicense(context, 'activate.ok', `key ${keyTail(key)} as ${instanceName}, instance ${json.instance.id}`);
     return { ok: true, instanceId: json.instance.id };
   } catch (e) {
@@ -383,7 +394,8 @@ export function activate(context: vscode.ExtensionContext) {
     }
   };
   panel.onScanRequest(rescan);
-  context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => { void rescan(); }));
+  let retarget: () => void = () => { void rescan(); };   // replaced below once notes/presets exist
+  context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => { lastRoot = undefined; retarget(); }));
 
   // ── Context (project notes) ───────────────────────────────────────────────
   panel.onLoadContext(() => {
@@ -437,14 +449,17 @@ export function activate(context: vscode.ExtensionContext) {
 
   // In a multi-root workspace, switching to an editor in another folder
   // re-targets the panel: tree, notes and presets all follow that folder.
+  retarget = () => {
+    void rescan();
+    panel.sendContextLoaded(context.globalState.get<string>(workspaceKey('notes')) ?? '');
+    panel.sendPresetsLoaded(getPresets());
+  };
   context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => {
     if ((vscode.workspace.workspaceFolders?.length ?? 0) < 2) { return; }
     const before = lastRoot?.toString();
     const after = resolveRoot()?.toString();
     if (before === after) { return; }
-    void rescan();
-    panel.sendContextLoaded(context.globalState.get<string>(workspaceKey('notes')) ?? '');
-    panel.sendPresetsLoaded(getPresets());
+    retarget();
   }));
 
   // ── Bundle ────────────────────────────────────────────────────────────────
@@ -460,7 +475,6 @@ export function activate(context: vscode.ExtensionContext) {
       vscode.window.showInformationMessage('SendToAI: A bundle is already in progress.');
       return;
     }
-    bundling = true;
 
     const isPro = cachedProStatus;
     if (req.mode === 'git' && !isPro) {
@@ -481,6 +495,7 @@ export function activate(context: vscode.ExtensionContext) {
     // a usable bundle AND demonstrates the relevance ranking Pro applies to
     // the whole project. Ask for money after proving value, never before.
 
+    bundling = true;
     panel.setBusy(true);
     try {
       const result = await vscode.window.withProgress(
@@ -558,7 +573,7 @@ export function activate(context: vscode.ExtensionContext) {
         const rel = vscode.workspace.asRelativePath(target);
         await vscode.env.clipboard.writeText(`FILE: ${rel}\n\n${sel}`);
         vscode.window.showInformationMessage(
-          `\u2705 Copied ${rel} \u00b7 ~${Math.ceil(sel.length / 4).toLocaleString()} tokens`);
+          `\u2705 Copied ${rel} \u00b7 ~${estimateTokens(sel).toLocaleString()} tokens`);
         void maybeAskForReview(context);
       } catch {
         vscode.commands.executeCommand('sendtoai.panel.focus');
@@ -636,24 +651,21 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
       const clip = await vscode.env.clipboard.readText();
+      if (clip.length > MAX_REPLY_CHARS) {
+        vscode.window.showWarningMessage('SendToAI: The clipboard holds more than 4 MB of text, which is not an AI reply. Copy just the reply and try again.');
+        return;
+      }
+      previewStore.clear();
       const replyEdits = parseReply(clip);
       if (replyEdits.length === 0) {
         vscode.window.showWarningMessage(
           'SendToAI: No file edits found on the clipboard. Copy the AI\'s FULL reply — not just the chat\'s "copy code" button — so the file paths and ``` fences (or SEARCH/REPLACE blocks) are included, then run this again.');
         return;
       }
-      // Group by path; a full-file block replaces earlier edits for that path,
-      // SEARCH/REPLACE blocks for the same path accumulate.
-      const byPath = new Map<string, { full?: string; sr: { search: string; replace: string }[] }>();
-      for (const e of replyEdits) {
-        // Clipboard content is untrusted — never let a path escape the workspace root
-        const norm = path.posix.normalize(e.path);
-        if (path.posix.isAbsolute(norm) || norm === '..' || norm.startsWith('../')) { continue; }
-        const entry = byPath.get(norm) ?? { sr: [] };
-        if (e.kind === 'full') { entry.full = e.content; entry.sr = []; }
-        else { entry.sr.push(...e.edits); }
-        byPath.set(norm, entry);
-      }
+      // Group by path (pure, tested): absolute/machine paths relativised or
+      // dropped, nothing may escape the workspace, full file + later
+      // SEARCH/REPLACE compose.
+      const byPath = groupReplyEdits(replyEdits, path.basename(root.fsPath));
       if (byPath.size === 0) {
         vscode.window.showWarningMessage('SendToAI: All file paths in the reply point outside the workspace — nothing to apply.');
         return;
@@ -666,21 +678,38 @@ export function activate(context: vscode.ExtensionContext) {
         if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) { return null; }
         let exists = true;
         let current = '';
-        try { current = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8'); } catch { exists = false; }
+        // The editor buffer (unsaved edits included) is the truth, not the disk
+        const open = vscode.workspace.textDocuments.find(d => d.uri.fsPath === uri.fsPath);
+        if (open) { current = open.getText(); }
+        else { try { current = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8'); } catch { exists = false; } }
         const sensitive = SENSITIVE_WRITE_RE.test(p);
-        const flag = sensitive ? ' · ⚠ review before applying' : '';
+        const notes: string[] = [];
+        if (sensitive) { notes.push('⚠ review before applying'); }
+        if (open?.isDirty) { notes.push('has unsaved edits'); }
+        let content: string;
+        let desc: string;
+        let ok = !sensitive;
         if (entry.full !== undefined) {
-          const c = entry.full;
-          return { label: p, description: `${c.split('\n').length} lines · ${exists ? 'replace whole file' : 'new file'}${flag}`, picked: !sensitive, p, c };
+          content = entry.full;
+          desc = `${content.split('\n').length} lines · ${exists ? 'replace whole file' : 'new file'}`;
+          if (entry.truncated) { notes.push('⚠ reply looks cut off before the closing fence'); ok = false; }
+          if (entry.sr.length) {
+            const r = applySearchReplace(content, entry.sr);
+            content = r.content;
+            desc += ` + ${r.applied} replacement(s)`;
+            if (r.failed.length) { notes.push(`⚠ ${r.failed.length} replacement(s) not found`); ok = false; }
+          }
+        } else {
+          if (!exists) { return { label: p, description: 'SEARCH/REPLACE for a file that does not exist · skipped', picked: false, p, c: '', skip: true }; }
+          const r = applySearchReplace(current, entry.sr);
+          content = r.content;
+          desc = `${r.applied} replacement(s)`;
+          if (r.failed.length) { notes.push(`⚠ ${r.failed.length} of ${entry.sr.length} not found: ${r.failed[0]}`); ok = false; }
+          if (r.applied === 0) { ok = false; }
         }
-        if (!exists) {
-          return { label: p, description: 'SEARCH/REPLACE for a file that does not exist · skipped', picked: false, p, c: '' };
-        }
-        const r = applySearchReplace(current, entry.sr);
-        const bad = r.failed.length ? ` · ⚠ ${r.failed.length} of ${entry.sr.length} not found: ${r.failed[0]}` : '';
-        return { label: p, description: `${r.applied} replacement(s)${bad}${flag}`, picked: !sensitive && r.failed.length === 0 && r.applied > 0, p, c: r.content };
+        return { label: p, description: desc + (notes.length ? ' · ' + notes.join(' · ') : ''), picked: ok, p, c: content, skip: false };
       }));
-      const items = candidates.filter((it): it is NonNullable<typeof it> => it !== null && it.c !== '' );
+      const items = candidates.filter((it): it is NonNullable<typeof it> => it !== null && !it.skip);
       if (items.length === 0) {
         vscode.window.showWarningMessage('SendToAI: Nothing applicable in the reply (paths outside the workspace, or SEARCH blocks for files that do not exist).');
         return;
@@ -713,6 +742,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (!go || go === 'Cancel') { return; }
       }
       const edit = new vscode.WorkspaceEdit();
+      const targets: { uri: vscode.Uri; text: string }[] = [];
       for (const it of picked) {
         const uri = vscode.Uri.joinPath(root, it.p);
         let exists = true;
@@ -720,16 +750,33 @@ export function activate(context: vscode.ExtensionContext) {
         if (!exists) {
           edit.createFile(uri, { ignoreIfExists: true });
           edit.insert(uri, new vscode.Position(0, 0), it.c);
+          targets.push({ uri, text: it.c });
         } else {
           const doc = await vscode.workspace.openTextDocument(uri);
-          edit.replace(uri, new vscode.Range(0, 0, doc.lineCount, 0), it.c);
+          // Keep the file's own line endings; the reply always comes LF
+          const eol = doc.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
+          const text = it.c.replace(/\r?\n/g, eol);
+          edit.replace(uri, new vscode.Range(0, 0, doc.lineCount, 0), text);
+          targets.push({ uri, text });
         }
       }
       const ok = await vscode.workspace.applyEdit(edit);
-      vscode.window.showInformationMessage(ok
-        ? `✅ Applied ${picked.length} file(s). Review in the editor or git diff · Ctrl+Z to undo.`
-        : 'SendToAI: Could not apply the edits.');
-      if (ok) { void maybeAskForReview(context); }
+      // applyEdit only changes editor buffers. Save, so the change is really on
+      // disk and in git diff, which is what the toast promises.
+      const failed: string[] = [];
+      for (const t of targets) {
+        try {
+          const doc = await vscode.workspace.openTextDocument(t.uri);
+          if (doc.getText() !== t.text) { failed.push(path.relative(root.fsPath, t.uri.fsPath)); continue; }
+          if (doc.isDirty) { await doc.save(); }
+        } catch { failed.push(path.relative(root.fsPath, t.uri.fsPath)); }
+      }
+      if (ok && failed.length === 0) {
+        vscode.window.showInformationMessage(`✅ Applied and saved ${targets.length} file(s). Review in git diff · Ctrl+Z in each file to undo.`);
+        void maybeAskForReview(context);
+      } else {
+        vscode.window.showErrorMessage(`SendToAI: ${failed.length ? failed.length + ' file(s) did not match the planned edit: ' + failed.join(', ') : 'Could not apply the edits.'}`);
+      }
     }),
 
     vscode.workspace.registerTextDocumentContentProvider('sendtoai-preview', {
@@ -791,7 +838,14 @@ export function activate(context: vscode.ExtensionContext) {
         // orphaned this machine's own slot whenever activation failed (limit
         // reached, network blip), and an orphaned slot can never be freed again.
         const oldStr = await context.secrets.get(SECRETS_KEY);
-        const oldKey = getLicenseKey();
+        let oldKey = getLicenseKey();
+        if (oldStr && !LICENSE_RE.test(oldKey)) {
+          // Setting was blanked but an activation is stored: does it belong to this key?
+          try {
+            const v = await lsPost('/v1/licenses/validate', { license_key: inputKey, instance_id: (JSON.parse(oldStr) as StoredActivation).instanceId });
+            if (v.valid === true) { oldKey = inputKey; }
+          } catch { /* offline: fall through to a fresh activation */ }
+        }
         if (oldStr && oldKey === inputKey) {
           // Same key re-entered: re-validate the existing activation, don't burn a slot.
           validating.dispose();
