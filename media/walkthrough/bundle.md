@@ -8,4 +8,4 @@
 
 **Modes**: whole project, open tabs, or git changes (Pro).
 
-The free tier keeps the 50 most relevant files for your prompt. Pro ($9.99 once, 14-day refund, 5 machines) bundles the whole project and can fit it to your AI's context window.
+The free tier keeps the 50 most relevant files for your prompt. Pro ($9.99 once, 30-day refund, 5 machines) bundles the whole project and can fit it to your AI's context window.

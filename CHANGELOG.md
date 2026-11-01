@@ -3,6 +3,38 @@
 All notable changes to **Send to AI** are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [3.15.0] — 2026-11-02
+
+### Added
+- **Apply AI Reply understands more reply shapes**: fences of any length (```` or ~~~),
+  the path in the fence line, on the line above, or as a first-line comment,
+  and **SEARCH/REPLACE blocks** (the format aider, Brud and most agents use),
+  matched exactly first and then with whitespace and line-ending differences
+  ignored. Ambiguous or missing matches are reported per file, never guessed.
+- **Preview diffs first**: an optional step opens a side-by-side diff for each
+  file before anything is written.
+- **Save Bundle as .txt**: button and command. ChatGPT and Claude turn large
+  pastes into attachments anyway; now you pick the filename.
+- Every bundle ends with a short instruction telling the AI how to format
+  changes so they apply cleanly.
+- The stats card shows "N of your M relevant files included" when the free
+  tier trimmed a bundle.
+- **Rate Send to AI** command; the review ask now happens after the fifth
+  successful bundle or apply, with plain wording.
+
+### Changed
+- **Context presets match late-2026 reality**: ChatGPT Free 27K, Plus/Go 54K
+  instant or 256K thinking, Pro 128K; Gemini Free 32K, AI Pro 1M; Claude 200K
+  or 1M by model; DeepSeek 1M. The old 8K/32K ChatGPT figures were a year
+  stale. Context bars updated to match.
+- The panel notes that long pastes become attachments in ChatGPT and Claude,
+  which is expected behaviour, not an error.
+- **Token estimates lean high for code** (3.3 chars per token instead of 4),
+  reflecting current tokenizers; Fit to AI Window is safer as a result.
+- Listing: shorter title ("Copy Codebase to ChatGPT, Claude & Gemini"),
+  hook-first description, keywords reallocated to the phrases people search.
+- Money-back guarantee lengthened from 14 to 30 days.
+
 ## [3.14.0] — 2026-11-01
 
 ### Fixed

@@ -355,7 +355,7 @@
         presets: '📋 <strong>Named presets are a Pro feature</strong> — save this selection and reload it in one click.<br>$9.99 once unlocks presets, unlimited files, git diff, and Fit to AI Window.',
       };
       document.getElementById('upgradeMsg').innerHTML = (msgs[d.reason] || msgs.files) +
-        '<br><span style="opacity:.75">14-day money-back guarantee · one license works on up to 5 machines</span>';
+        '<br><span style="opacity:.75">30-day money-back guarantee · one license works on up to 5 machines</span>';
       document.getElementById('upgradeBanner').classList.add('show');
       document.getElementById('upgradeBanner').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       return;
@@ -425,6 +425,9 @@
     document.getElementById('projName').textContent = '📁 ' + d.folderName;
     document.getElementById('fc').textContent = d.fileCount.toLocaleString();
     document.getElementById('ic').textContent = d.ignoredCount.toLocaleString();
+    document.getElementById('trimNote').textContent = d.trimmedFrom
+      ? 'Free tier: ' + d.fileCount + ' of your ' + d.trimmedFrom + ' relevant files included · Pro bundles all of them'
+      : '';
     document.getElementById('tk').textContent = '~' + (d.tokenEstimate >= 1000
       ? (d.tokenEstimate / 1000).toFixed(1) + 'k'
       : d.tokenEstimate.toLocaleString());
@@ -441,10 +444,12 @@
       document.getElementById(pctId).textContent = pct >= 100 ? 'OVER' : pct.toFixed(0) + '%';
       document.getElementById(pctId).style.color = pct >= 100 ? '#e05c5c' : '';
     }
-    setBar('barGptFree', 'pctGptFree', 8000);
-    setBar('barGptPlus', 'pctGptPlus', 32000);
-    setBar('barClaude',  'pctClaude',  1000000);
-    setBar('barGemini',  'pctGemini',  1000000);
+    // Context windows as of Nov 2026 (chatgpt.com/pricing, Anthropic help 8606394, Google help 14903178)
+    setBar('barGptFree', 'pctGptFree', 27000);
+    setBar('barGptPlus', 'pctGptPlus', 54000);
+    setBar('barClaude',  'pctClaude',  200000);
+    setBar('barGemini',  'pctGemini',  32000);
+    setBar('barPaid',    'pctPaid',    1000000);
 
     const pills = document.getElementById('typePills');
     pills.innerHTML = '';

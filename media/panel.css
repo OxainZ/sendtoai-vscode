@@ -1,4 +1,5 @@
 /* Send to AI side panel styles. Loaded by panel.ts via asWebviewUri. */
+.hint { font-size: 10px; opacity: .65; margin-top: 4px; line-height: 1.35; }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {

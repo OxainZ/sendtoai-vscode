@@ -1,4 +1,4 @@
-# 🚀 Send to AI — Task-Aware Code Bundling, Round-Trip
+# 🚀 Send to AI — Copy Codebase to ChatGPT, Claude & Gemini
 
 [![Version](https://img.shields.io/visual-studio-marketplace/v/oxainz.sendtoai?label=marketplace&color=e07b39)](https://marketplace.visualstudio.com/items?itemName=oxainz.sendtoai)
 [![MIT License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -7,7 +7,7 @@
 [![Rating](https://img.shields.io/visual-studio-marketplace/stars/oxainz.sendtoai)](https://marketplace.visualstudio.com/items?itemName=oxainz.sendtoai&ssr=false#review-details)
 -->
 
-**Bundle your errors and the connected code for *any* AI, paste the answer back, apply it — no API key.**
+**The only VS Code extension that both bundles your code for any AI chat *and* applies the reply back.** No API key. No telemetry. Nothing leaves your machine except what you paste.
 
 <img src="images/panel.png" alt="SendToAI panel: pick bundle mode, check files with live token estimates, choose prompt and output format, bundle to clipboard" width="480">
 
@@ -78,7 +78,7 @@ Works with **any** AI you already use — it's a companion to your existing chat
 - Use it on up to **5 machines** — run *Deactivate License on This Machine* to move a slot
 - All future Pro features included
 
-**[🚀 Upgrade — $9.99 lifetime](https://sendtoai.dev)** · plus VAT where applicable · No subscription. 14-day money-back guarantee.
+**[🚀 Upgrade — $9.99 lifetime](https://sendtoai.dev)** · plus VAT where applicable · No subscription. 30-day money-back guarantee.
 
 ---
 
@@ -173,7 +173,7 @@ Output formats include an **XML** mode tuned for Claude and structured analysis,
 - 🌐 **Website**: [sendtoai.dev](https://sendtoai.dev)
 - 🐛 **Found a bug?** [Open an issue](https://github.com/OxainZ/sendtoai-vscode/issues)
 - 💬 **Need help?** support@sendtoai.dev
-- 💳 **Billing & refunds**: 14-day no-questions refund — email support@sendtoai.dev with your order number. Purchases are processed by Lemon Squeezy, so your receipt and card statement say **"Sold through Link, LLC"**
+- 💳 **Billing & refunds**: 30-day no-questions refund — email support@sendtoai.dev with your order number. Purchases are processed by Lemon Squeezy, so your receipt and card statement say **"Sold through Link, LLC"**
 - ⭐ **Love it?** [Rate it 5 stars](https://marketplace.visualstudio.com/items?itemName=oxainz.sendtoai&ssr=false#review-details)
 
 ## 📄 License

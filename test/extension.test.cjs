@@ -54,3 +54,41 @@ test('license cache signature detects tampering and rejects unsigned caches', ()
   assert.equal(cacheIsAuthentic('other', signed), false, 'different secret');
   assert.equal(cacheIsAuthentic(secret, c), false, 'unsigned cache is never trusted');
 });
+
+const { parseReply, applySearchReplace } = require('../out/reply.js');
+
+test('parseReply: long fences, tilde fences, first-line comment paths', () => {
+  const reply = [
+    'Here is the README:', '', '````markdown README.md', '# Title', '', '```js', 'inner fence stays', '```', '````', '',
+    '~~~python', '# src/app.py', 'print(1)', '~~~', '',
+    '```css', '/* styles/main.css */', 'body { margin: 0 }', '```',
+  ].join('\n');
+  const edits = parseReply(reply);
+  assert.deepEqual(edits.map(e => [e.path, e.kind]), [['README.md', 'full'], ['src/app.py', 'full'], ['styles/main.css', 'full']]);
+  assert.equal(edits[0].content, '# Title\n\n```js\ninner fence stays\n```', 'inner triple fence must not close a quad fence');
+  assert.equal(edits[1].content, 'print(1)', 'comment path line is stripped');
+});
+
+test('parseReply: SEARCH/REPLACE inside a fence and raw with a label line', () => {
+  const reply = [
+    '```', 'src/a.ts', '<<<<<<< SEARCH', 'const a = 1;', '=======', 'const a = 2;', '>>>>>>> REPLACE', '```', '',
+    '**src/b.ts**', '<<<<<<< SEARCH', 'old', '=======', 'new', '>>>>>>> REPLACE', '',
+    'And prose mentioning Node.js afterwards.',
+  ].join('\n');
+  const edits = parseReply(reply);
+  assert.deepEqual(edits, [
+    { path: 'src/a.ts', kind: 'replace', edits: [{ search: 'const a = 1;', replace: 'const a = 2;' }] },
+    { path: 'src/b.ts', kind: 'replace', edits: [{ search: 'old', replace: 'new' }] },
+  ]);
+});
+
+test('applySearchReplace: exact, whitespace/CRLF tolerant, not-found and ambiguous are reported', () => {
+  const file = 'function a() {\r\n  return 1;  \r\n}\r\nfunction b() {\r\n  return 1;  \r\n}\r\n';
+  const r1 = applySearchReplace(file, [{ search: 'function a() {\n  return 1;\n}', replace: 'function a() {\n  return 42;\n}' }]);
+  assert.equal(r1.applied, 1); assert.deepEqual(r1.failed, []);
+  assert.ok(r1.content.startsWith('function a() {\r\n  return 42;\r\n}'), 'keeps the file\'s CRLF endings');
+  const r2 = applySearchReplace(file, [{ search: '  return 1;', replace: '  return 2;' }]);
+  assert.equal(r2.applied, 0); assert.match(r2.failed[0], /ambiguous/);
+  const r3 = applySearchReplace(file, [{ search: 'nothing like this', replace: 'x' }]);
+  assert.equal(r3.applied, 0); assert.match(r3.failed[0], /not found/);
+});
