@@ -175,8 +175,8 @@
         "compile": "tsc -p ./",
         "watch": "tsc -watch -p ./",
         "publish:ovsx": "npx ovsx publish -p $OVSX_TOKEN",
-        "test": "npm run compile && node --test \"test/*.test.cjs\"",
-        "test:worker": "cd worker && node --test \"test/*.test.js\""
+        "test": "npm run compile && node --test test/bundler.test.cjs test/extension.test.cjs",
+        "test:worker": "cd worker && node --test test/index.test.js"
     },
     "devDependencies": {
         "@types/node": "16.x",

@@ -5,7 +5,7 @@
     "type": "module",
     "description": "Cloudflare Worker: disables Lemon Squeezy license keys when their order is refunded",
     "scripts": {
-        "test": "node --test \"test/*.test.js\"",
+        "test": "node --test test/index.test.js",
         "deploy": "npx wrangler@4 deploy",
         "tail": "npx wrangler@4 tail"
     },
