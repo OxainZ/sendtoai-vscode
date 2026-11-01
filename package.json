@@ -2,7 +2,7 @@
     "name": "sendtoai",
     "displayName": "Send to AI — Copy Codebase to ChatGPT, Claude & Gemini",
     "description": "Copy your codebase into ChatGPT, Claude or Gemini in one paste, then apply the AI's edits back to your files. Bundles the errors from the Problems panel with the code they point at. No API key, no telemetry, nothing leaves your machine. Free: the 50 most relevant files. Pro ($9.99 once): the whole project.",
-    "version": "3.15.0",
+    "version": "3.15.1",
     "publisher": "oxainz",
     "icon": "resources/icon.png",
     "license": "MIT",
@@ -246,7 +246,8 @@
         "test": "npm run compile && node --check media/panel.js && node --test test/bundler.test.cjs test/extension.test.cjs test/panel.test.cjs",
         "test:worker": "cd worker && node --test test/index.test.js",
         "lint": "eslint .",
-        "test:e2e": "npm run compile && node test/e2e/runTests.cjs"
+        "test:e2e": "npm run compile && node test/e2e/runTests.cjs",
+        "demo:record": "npm run compile && node tools/demo/record.cjs"
     },
     "devDependencies": {
         "@eslint/js": "^9.39.5",
@@ -255,9 +256,11 @@
         "@vscode/test-electron": "^2.5.2",
         "@vscode/vsce": "^4.1.0",
         "eslint": "^9.39.5",
+        "gifenc": "^1.0.3",
         "globals": "^15.15.0",
         "jsdom": "^25.0.1",
         "ovsx": "^0.10.1",
+        "pngjs": "^7.0.0",
         "typescript": "^4.9.4",
         "typescript-eslint": "^8.72.1"
     },

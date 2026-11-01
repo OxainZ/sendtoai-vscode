@@ -16,3 +16,4 @@ node_modules/**
 publish-extension.js
 eslint.config.mjs
 .vscode-test/**
+tools/**

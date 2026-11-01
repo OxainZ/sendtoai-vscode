@@ -37,7 +37,7 @@ export default [
 
   // Tests (Node)
   {
-    files: ['test/**/*.cjs', 'test/e2e/**/*.js', 'worker/test/**/*.js'],
+    files: ['test/**/*.cjs', 'test/e2e/**/*.js', 'worker/test/**/*.js', 'tools/**/*.cjs', 'tools/**/*.js'],
     languageOptions: { sourceType: 'commonjs', globals: { ...globals.node } },
     rules: { ...js.configs.recommended.rules },
   },

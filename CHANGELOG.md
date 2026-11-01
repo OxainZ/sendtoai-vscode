@@ -3,6 +3,11 @@
 All notable changes to **Send to AI** are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [3.15.1] — 2026-11-02
+
+### Changed
+- README opens with a 15-second demo GIF of the full loop (scan, bundle, apply with diff preview). The GIF is recorded by a script (`npm run demo:record`) that drives a real VS Code, so it stays current with the UI.
+
 ## [3.15.0] — 2026-11-02
 
 ### Added
