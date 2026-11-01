@@ -5,7 +5,7 @@
 # credential. One-time setup (publisher owner, in a browser):
 #   1. https://marketplace.visualstudio.com/manage/publishers/oxainz
 #      -> Trusted Publishing -> Create
-#      owner: OxainZ   repo: sendtoai-vscode   workflow: release.yml
+#      owner: OxainZ   repo: sendtoai-vscode   workflow: release.yaml
 #      environment: marketplace
 #   2. GitHub repo -> Settings -> Environments -> New "marketplace"
 #      -> Required reviewers: yourself (free on public repos). Every publish
