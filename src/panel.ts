@@ -928,7 +928,8 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
         window:  '🎯 <strong>Fit to AI Window is a Pro feature</strong> — auto-trims the bundle to your AI\\'s context, keeping the most relevant files.<br>$9.99 once unlocks it (plus unlimited files, git diff, and presets).',
         presets: '📋 <strong>Named presets are a Pro feature</strong> — save this selection and reload it in one click.<br>$9.99 once unlocks presets, unlimited files, git diff, and Fit to AI Window.',
       };
-      document.getElementById('upgradeMsg').innerHTML = msgs[d.reason] || msgs.files;
+      document.getElementById('upgradeMsg').innerHTML = (msgs[d.reason] || msgs.files) +
+        '<br><span style="opacity:.75">14-day money-back guarantee · one license works on up to 5 machines</span>';
       document.getElementById('upgradeBanner').classList.add('show');
       document.getElementById('upgradeBanner').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       return;

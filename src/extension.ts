@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import * as https from 'https';
 import * as path from 'path';
+import * as os from 'os';
+import * as crypto from 'crypto';
 import { SendToAIPanel, PanelRequest } from './panel';
 import { buildBundle, scanProjectTree } from './bundler';
 import { estimateCost } from './costEstimator';
@@ -15,9 +17,16 @@ const PRODUCT_IDS = new Set<number>([926714]);
 const isOurProduct = (id: unknown): boolean =>
   typeof id === 'number' && PRODUCT_IDS.has(id);
 const CACHE_TTL_MS        = 24 * 60 * 60 * 1000;
-const WARN_AFTER_MS       = 30 * 24 * 60 * 60 * 1000;
-const HARD_BLOCK_AFTER_MS = 365 * 24 * 60 * 60 * 1000;
+// Offline grace: a refunded or revoked key is caught at the next online check
+// (24h). These windows only matter when the machine stays offline. 14 days of
+// warnings, then Pro switches off at 90 days until the key is re-verified.
+const WARN_AFTER_MS       = 14 * 24 * 60 * 60 * 1000;
+const HARD_BLOCK_AFTER_MS = 90 * 24 * 60 * 60 * 1000;
 const SECRETS_KEY         = 'sendtoai.activation';
+const CACHE_SECRET_KEY    = 'sendtoai.cacheSecret';   // HMAC key for the validity cache (SecretStorage)
+const INSTANCE_UUID_KEY   = 'sendtoai.instanceUuid';  // stable per-install id (globalState, not synced)
+const LICENSE_LOG_KEY     = 'sendtoai.licenseLog';
+const LICENSE_LOG_MAX     = 200;
 const MAX_RESPONSE_BYTES  = 256 * 1024;
 // Files that execute on install / open / commit. An AI reply can be steered by
 // prompt injection hidden in a bundled file, so edits to these are never
@@ -31,7 +40,67 @@ interface LicenseCache {
   valid: boolean;
   checkedAt: number;
   lastValidAt: number;
+  sig?: string;
 }
+
+// ── Cache signing ─────────────────────────────────────────────────────────────
+// globalState is plain JSON in a user-readable SQLite file. Signing the cache
+// with a secret that lives in SecretStorage (OS keychain) means a hand-edited
+// "valid: true" is ignored and the key is simply re-verified online.
+export function cacheSignature(secret: string, c: Omit<LicenseCache, 'sig'>): string {
+  return crypto.createHmac('sha256', secret)
+    .update(`${c.key}|${c.valid ? 1 : 0}|${c.checkedAt}|${c.lastValidAt}`)
+    .digest('hex');
+}
+export function cacheIsAuthentic(secret: string, c: LicenseCache): boolean {
+  if (!c.sig) { return false; }
+  const expected = cacheSignature(secret, c);
+  return expected.length === c.sig.length &&
+    crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(c.sig));
+}
+
+async function getCacheSecret(context: vscode.ExtensionContext): Promise<string | null> {
+  try {
+    let s = await context.secrets.get(CACHE_SECRET_KEY);
+    if (!s) {
+      s = crypto.randomBytes(32).toString('hex');
+      await context.secrets.store(CACHE_SECRET_KEY, s);
+    }
+    return s;
+  } catch { return null; } // keychain unavailable: caller treats cache as absent
+}
+
+// ── Activation identity ───────────────────────────────────────────────────────
+// vscode.env.machineId is derived from a MAC address: it changes with docking
+// stations and VMs and differs in every WSL/SSH/Codespaces host, each change
+// silently burning one of the 5 activation slots. A UUID generated once per
+// install is stable, and the hostname prefix makes the instance recognisable
+// in the Lemon Squeezy dashboard ("deactivate the old laptop").
+function getInstanceName(context: vscode.ExtensionContext): string {
+  let uuid = context.globalState.get<string>(INSTANCE_UUID_KEY);
+  if (!uuid) {
+    uuid = crypto.randomUUID();
+    void context.globalState.update(INSTANCE_UUID_KEY, uuid);
+  }
+  const host = os.hostname().replace(/[^A-Za-z0-9-]/g, '').slice(0, 24) || 'vscode';
+  return `${host}-${uuid.slice(0, 8)}`;
+}
+
+// ── Activity log ──────────────────────────────────────────────────────────────
+// Timestamped activation / validation history. Stripe lists "a system log
+// proving the customer used your software" as the evidence that wins digital
+// goods disputes; this is that log, exportable via the Show License Activity
+// command.
+interface LicenseLogEntry { t: number; event: string; detail?: string }
+async function logLicense(context: vscode.ExtensionContext, event: string, detail?: string): Promise<void> {
+  try {
+    const log = context.globalState.get<LicenseLogEntry[]>(LICENSE_LOG_KEY) ?? [];
+    log.push({ t: Date.now(), event, detail });
+    if (log.length > LICENSE_LOG_MAX) { log.splice(0, log.length - LICENSE_LOG_MAX); }
+    await context.globalState.update(LICENSE_LOG_KEY, log);
+  } catch { /* never let logging break licensing */ }
+}
+const keyTail = (key: string) => key ? `…${key.slice(-4)}` : '(none)';
 
 interface StoredActivation {
   instanceId: string;
@@ -85,18 +154,22 @@ type ActivateResult =
 
 async function activateLicense(key: string, context: vscode.ExtensionContext): Promise<ActivateResult | null> {
   try {
-    const instanceName = `vscode-${vscode.env.machineId.slice(0, 16)}`;
+    const instanceName = getInstanceName(context);
     const json = await lsPost('/v1/licenses/activate', { license_key: key, instance_name: instanceName });
 
     if (json.activated !== true || !isOurProduct(json.meta?.product_id)) {
       const limitReached = typeof json.error === 'string' && json.error.toLowerCase().includes('activation limit');
+      void logLicense(context, limitReached ? 'activate.limit' : 'activate.rejected',
+        `key ${keyTail(key)} as ${instanceName}${typeof json.error === 'string' ? ': ' + json.error : ''}`);
       return { ok: false, limitReached };
     }
 
     const activation: StoredActivation = { instanceId: json.instance.id, activatedAt: Date.now() };
     await context.secrets.store(SECRETS_KEY, JSON.stringify(activation));
+    void logLicense(context, 'activate.ok', `key ${keyTail(key)} as ${instanceName}, instance ${json.instance.id}`);
     return { ok: true, instanceId: json.instance.id };
-  } catch {
+  } catch (e) {
+    void logLicense(context, 'activate.offline', e instanceof Error ? e.message : String(e));
     return null; // network error
   }
 }
@@ -124,15 +197,20 @@ async function checkLicenseRemote(key: string, context: vscode.ExtensionContext)
     if (json.valid !== true || !isOurProduct(json.meta?.product_id)) {
       // Instance no longer exists (secrets from old install, etc.) — re-activate
       if (typeof json.error === 'string' && json.error.toLowerCase().includes('instance')) {
+        void logLicense(context, 'validate.instance-gone', `instance ${stored.instanceId}; re-activating`);
         await context.secrets.delete(SECRETS_KEY);
         const result = await activateLicense(key, context);
         if (result === null) { return null; }
         return result.ok;
       }
+      void logLicense(context, 'validate.invalid',
+        `key ${keyTail(key)}, status ${json.license_key?.status ?? '?'}${typeof json.error === 'string' ? ': ' + json.error : ''}`);
       return false;
     }
+    void logLicense(context, 'validate.ok', `key ${keyTail(key)}, instance ${stored.instanceId}`);
     return true;
-  } catch {
+  } catch (e) {
+    void logLicense(context, 'validate.offline', e instanceof Error ? e.message : String(e));
     return null; // network error
   }
 }
@@ -158,16 +236,25 @@ async function refreshLicense(
     return false;
   }
 
-  const cache = context.globalState.get<LicenseCache>('sendtoai.licenseCache');
+  const secret = await getCacheSecret(context);
+  const raw = context.globalState.get<LicenseCache>('sendtoai.licenseCache');
+  // An unsigned or mis-signed cache is treated as no cache at all: the key gets
+  // re-verified online, and offline the user stays on the free tier until then.
+  const cache = raw && secret && cacheIsAuthentic(secret, raw) ? raw : undefined;
   const now = Date.now();
   // A cache stamped in the future means the clock was rolled back (or the cache
   // was hand-edited). Don't trust it: re-verify now, and fail closed if offline.
   const clockRolledBack = !!cache && cache.checkedAt > now + 60_000;
 
-  if (!force && !clockRolledBack && cache && cache.key === key && (now - cache.checkedAt) < CACHE_TTL_MS) {
+  const cacheUsable = !clockRolledBack && !!cache && cache.key === key;
+  if (!force && cacheUsable && (now - cache.checkedAt) < CACHE_TTL_MS) {
     cachedProStatus = cache.valid;
     return cache.valid;
   }
+  // The online check can take up to 8 s. Until it answers, act on the last
+  // verdict so a paying user who bundles right after startup is not shown the
+  // upgrade banner (the verdict is corrected below if the server disagrees).
+  if (cacheUsable) { cachedProStatus = cache.valid; }
 
   const remote = await checkLicenseRemote(key, context);
 
@@ -192,12 +279,14 @@ async function refreshLicense(
     return false;
   }
 
-  await context.globalState.update('sendtoai.licenseCache', {
+  const fresh: Omit<LicenseCache, 'sig'> = {
     key,
     valid: remote,
     checkedAt: now,
     lastValidAt: remote ? now : (cache?.lastValidAt ?? 0),
-  } satisfies LicenseCache);
+  };
+  await context.globalState.update('sendtoai.licenseCache',
+    { ...fresh, sig: secret ? cacheSignature(secret, fresh) : undefined } satisfies LicenseCache);
 
   cachedProStatus = remote;
   return remote;
@@ -358,12 +447,18 @@ export function activate(context: vscode.ExtensionContext) {
   });
 
   // ── Bundle ────────────────────────────────────────────────────────────────
+  let bundling = false;
   panel.onBundleRequest(async (req: PanelRequest) => {
     const root = vscode.workspace.workspaceFolders?.[0]?.uri;
     if (!root) {
       vscode.window.showErrorMessage('SendToAI: No workspace folder open.');
       return;
     }
+    if (bundling) {
+      vscode.window.showInformationMessage('SendToAI: A bundle is already in progress.');
+      return;
+    }
+    bundling = true;
 
     const isPro = cachedProStatus;
     if (req.mode === 'git' && !isPro) {
@@ -389,8 +484,10 @@ export function activate(context: vscode.ExtensionContext) {
       const result = await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: 'SendToAI: bundling…', cancellable: true },
         async (progress, token) => {
+          // Prefer the notes as they currently read in the panel (unsaved
+          // edits included) over the last saved copy.
           const contextBlock = req.includeContext
-            ? (context.globalState.get<string>(workspaceKey('notes')) ?? '')
+            ? (req.notes ?? context.globalState.get<string>(workspaceKey('notes')) ?? '')
             : undefined;
 
           const res = await buildBundle(
@@ -429,6 +526,7 @@ export function activate(context: vscode.ExtensionContext) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg !== 'Cancelled') { vscode.window.showErrorMessage(`SendToAI: ${msg}`); }
     } finally {
+      bundling = false;
       panel.setBusy(false);
     }
   });
@@ -528,6 +626,10 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('sendtoai.applyResponse', async () => {
       const root = vscode.workspace.workspaceFolders?.[0]?.uri;
       if (!root) { vscode.window.showErrorMessage('SendToAI: No workspace folder open.'); return; }
+      if (!vscode.workspace.isTrusted) {
+        vscode.window.showWarningMessage('SendToAI: Apply AI Reply writes files, so it is disabled in Restricted Mode. Trust this workspace to use it.');
+        return;
+      }
       const clip = await vscode.env.clipboard.readText();
       const blocks = parseFileBlocks(clip);
       if (blocks.length === 0) {
@@ -674,6 +776,34 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
 
+    // Evidence pack: what to send Lemon Squeezy if a buyer disputes the charge
+    // ("an IP address or system log proving the customer used your software").
+    vscode.commands.registerCommand('sendtoai.showLicenseActivity', async () => {
+      const key = getLicenseKey();
+      let instanceId = '(none)';
+      try {
+        const s = await context.secrets.get(SECRETS_KEY);
+        if (s) { instanceId = (JSON.parse(s) as StoredActivation).instanceId; }
+      } catch { /* keychain unavailable */ }
+      const log = context.globalState.get<LicenseLogEntry[]>(LICENSE_LOG_KEY) ?? [];
+      const lines = [
+        'SendToAI Pro — license activity on this machine',
+        `Generated:     ${new Date().toISOString()}`,
+        `Extension:     ${context.extension.packageJSON.version}`,
+        `License key:   ${keyTail(key)}`,
+        `Instance name: ${getInstanceName(context)}`,
+        `Instance id:   ${instanceId}`,
+        `Pro active:    ${cachedProStatus ? 'yes' : 'no'}`,
+        '',
+        `Events (${log.length}, newest last):`,
+        ...log.map(e => `${new Date(e.t).toISOString()}  ${e.event.padEnd(24)} ${e.detail ?? ''}`),
+        '',
+        'Share this with support@sendtoai.dev if you need help with activations or billing.',
+      ];
+      const doc = await vscode.workspace.openTextDocument({ content: lines.join('\n'), language: 'plaintext' });
+      await vscode.window.showTextDocument(doc, { preview: false });
+    }),
+
     vscode.commands.registerCommand('sendtoai.deactivateLicense', async () => {
       const key = getLicenseKey();
       if (!LICENSE_RE.test(key)) {
@@ -708,6 +838,7 @@ export function activate(context: vscode.ExtensionContext) {
         deactivating.dispose();
 
         if (json.deactivated === true) {
+          void logLicense(context, 'deactivate.ok', `instance ${stored.instanceId}`);
           await context.secrets.delete(SECRETS_KEY);
           await context.globalState.update('sendtoai.licenseCache', undefined);
           cachedProStatus = false;

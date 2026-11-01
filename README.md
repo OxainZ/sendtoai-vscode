@@ -109,6 +109,8 @@ The fastest path — open the **SendToAI** view and click:
 ### Command Palette
 `Ctrl+Shift+P` → type **"Send to AI"** → pick any command (including Bundle Errors / Apply AI Response).
 
+Pro license commands: **Enter License Key**, **Deactivate License on This Machine** (frees one of your 5 slots before moving to a new PC), and **Show License Activity** (a timestamped activation log to send support if anything goes wrong).
+
 ---
 
 ## ⚙️ Configuration

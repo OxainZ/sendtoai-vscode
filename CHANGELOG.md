@@ -3,6 +3,34 @@
 All notable changes to **Send to AI** are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [3.12.0] — 2026-11-01
+
+**Licensing that survives real life, plus dispute evidence.**
+
+### Added
+- **Show License Activity** command: a timestamped log of every activation,
+  validation and deactivation on this machine, with the instance name and id.
+  This is the "system log proving the customer used your software" that card
+  networks accept as evidence in a dispute, and it is what to send support
+  when an activation goes wrong.
+- Upgrade prompts now state the 14-day money-back guarantee and the 5-machine
+  allowance.
+- Restricted Mode support: bundling works in untrusted workspaces; Apply AI
+  Reply, which writes files, asks for workspace trust first.
+
+### Changed
+- Activations are named after the machine plus a per-install id instead of
+  VS Code's machineId, which changes with docking stations, VMs and every
+  WSL or SSH host and silently consumed activation slots.
+- The license validity cache is signed with a secret kept in the OS keychain.
+  A hand-edited cache is ignored and the key is simply re-verified online.
+- Offline grace is now 14 days of warnings and a 90-day cut-off (was 30/365).
+- A paying user who bundles right after startup no longer sees the upgrade
+  banner while the daily online check is still running.
+- Unsaved edits to Project Notes are included in the bundle when "include
+  notes" is on; previously only the last saved copy was used.
+- Two bundles can no longer run at once.
+
 ## [3.11.1] — 2026-11-01
 
 ### Changed
