@@ -179,6 +179,7 @@ Output formats include an **XML** mode tuned for Claude and structured analysis,
 ## 📞 Support
 
 - 🌐 **Website**: [sendtoai.dev](https://sendtoai.dev)
+- 📝 **How it compares**: [Send to AI vs Repomix vs gitingest](https://dev.to/oxainz/pasting-a-whole-repo-into-chatgpt-or-claude-from-vs-code-send-to-ai-vs-repomix-vs-gitingest-1b9e) (dev.to)
 - 🐛 **Found a bug?** [Open an issue](https://github.com/OxainZ/sendtoai-vscode/issues)
 - 💬 **Need help?** support@sendtoai.dev
 - 💳 **Billing & refunds**: 30-day no-questions refund — email support@sendtoai.dev with your order number. Purchases are processed by Lemon Squeezy, so your receipt and card statement say **"Sold through Link, LLC"**
