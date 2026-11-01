@@ -52,7 +52,7 @@ test('disableKeysForOrder surfaces an API failure so the webhook returns 500 and
   await assert.rejects(() => disableKeysForOrder(1, 'k', fetchImpl), /HTTP 503/);
 });
 
-test('fetch handler: dispute_created revokes the disputed order's keys', async () => {
+test('fetch handler: dispute_created revokes the keys of the disputed order', async () => {
   const env = { LS_WEBHOOK_SECRET: SECRET, LS_API_KEY: 'k' };
   const calls = [];
   const realFetch = globalThis.fetch;
