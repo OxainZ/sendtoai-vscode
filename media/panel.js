@@ -321,7 +321,51 @@
   send('loadPresets');
 
   // ── Message handler ────────────────────────────────────────────────────────────
+  // Demo driver: a visible pointer that moves to a control and really clicks it,
+  // and a typist for the prompt box. Only the extension host can send these.
+  function demoPointer() {
+    let p = document.getElementById('demoPointer');
+    if (!p) {
+      p = document.createElement('div'); p.id = 'demoPointer';
+      p.innerHTML = '<svg width="22" height="28" viewBox="0 0 22 28"><path d="M2 2 L2 22 L7.5 17 L11 26 L14.5 24.5 L11 16 L18 16 Z" fill="#fff" stroke="#000" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+      document.body.appendChild(p);
+      p.style.left = '140px'; p.style.top = '420px';
+    }
+    return p;
+  }
+  async function demoClick(selector) {
+    const el = document.querySelector(selector);
+    if (!el) { return; }
+    el.scrollIntoView({ block: 'center' });
+    await new Promise(r => setTimeout(r, 250));
+    const r = el.getBoundingClientRect();
+    const p = demoPointer();
+    p.style.left = (r.left + r.width * 0.55) + 'px';
+    p.style.top = (r.top + r.height * 0.55) + 'px';
+    await new Promise(r2 => setTimeout(r2, 800));
+    el.classList.add('demo-press');
+    p.classList.add('press');
+    await new Promise(r2 => setTimeout(r2, 160));
+    el.classList.remove('demo-press'); p.classList.remove('press');
+    el.click();
+  }
+  async function demoType(text) {
+    const sel = document.getElementById('promptSelect');
+    sel.value = 'custom'; onPromptChange();
+    const ta = document.getElementById('customPrompt');
+    ta.scrollIntoView({ block: 'center' });
+    ta.focus(); ta.value = '';
+    for (const ch of text) { ta.value += ch; await new Promise(r => setTimeout(r, 28)); }
+  }
+
   window.addEventListener('message', ({ data: d }) => {
+    if (d.command === '__demo') {
+      if (d.type === 'click') { demoClick(d.selector); }
+      if (d.type === 'prompt') { demoType(d.text); }
+      if (d.type === 'select') { const el = document.querySelector(d.selector); if (el) { el.scrollIntoView({ block: 'center' }); el.value = d.value; el.dispatchEvent(new Event('change')); } }
+      if (d.type === 'scrollTop') { window.scrollTo({ top: 0, behavior: 'smooth' }); }
+      return;
+    }
     if (d.command === 'busy') {
       const btn = document.getElementById('bundleBtn');
       btn.disabled = true;

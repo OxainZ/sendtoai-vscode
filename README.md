@@ -9,7 +9,13 @@
 
 **The only VS Code extension that both bundles your code for any AI chat *and* applies the reply back.** No API key. No telemetry. Nothing leaves your machine except what you paste.
 
+<img src="images/demo.gif" alt="Send to AI in 15 seconds: the file tree is scanned, Bundle copies 5 files with a token count, the AI reply is applied with a diff preview and the edited file opens" width="960">
+
+<details><summary>Panel at a glance</summary>
+
 <img src="images/panel.png" alt="SendToAI panel: pick bundle mode, check files with live token estimates, choose prompt and output format, bundle to clipboard" width="480">
+
+</details>
 
 
 That's the whole loop, inside your editor:

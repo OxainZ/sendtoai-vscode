@@ -1,5 +1,9 @@
 /* Send to AI side panel styles. Loaded by panel.ts via asWebviewUri. */
 .hint { font-size: 10px; opacity: .65; margin-top: 4px; line-height: 1.35; }
+/* demo pointer (only ever created by the demo driver) */
+#demoPointer { position: fixed; z-index: 9999; pointer-events: none; transition: left .75s cubic-bezier(.4,0,.2,1), top .75s cubic-bezier(.4,0,.2,1), transform .12s; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
+#demoPointer.press { transform: scale(.85); }
+.demo-press { filter: brightness(1.25); transform: scale(.98); }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {

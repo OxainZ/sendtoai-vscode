@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AI chat</title>
+<style>
+  :root { color-scheme: dark; --bg:#212121; --panel:#2f2f2f; --fg:#ececec; --muted:#9a9a9a; --accent:#e07b39; --code:#171717; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font: 15px/1.5 "Segoe UI", system-ui, sans-serif; height:100vh; display:flex; flex-direction:column; }
+  header { padding:10px 18px; border-bottom:1px solid #3a3a3a; display:flex; align-items:center; gap:10px; font-weight:600; }
+  header .dot { width:10px; height:10px; border-radius:50%; background:#5ec26a; }
+  header .tag { margin-left:auto; font-weight:400; color:var(--muted); font-size:12px; }
+  main { flex:1; overflow:auto; padding:18px 18px 0; }
+  .msg { max-width: 860px; margin: 0 auto 16px; display:flex; gap:12px; }
+  .msg .who { width:28px; height:28px; border-radius:50%; flex:none; display:grid; place-items:center; font-size:12px; font-weight:700; }
+  .user .who { background:#3b4a6b; } .ai .who { background:#4a3b6b; }
+  .bubble { background:var(--panel); border-radius:12px; padding:10px 14px; min-width:0; flex:1; }
+  .chip { display:inline-flex; align-items:center; gap:8px; background:#1b1b1b; border:1px solid #444; border-radius:8px; padding:6px 10px; font-size:13px; margin-bottom:8px; }
+  .chip .ico { width:22px; height:26px; border-radius:3px; background:#e07b39; color:#fff; font-size:10px; display:grid; place-items:center; font-weight:700; }
+  .chip .meta { color:var(--muted); font-size:12px; }
+  pre { background:var(--code); border:1px solid #333; border-radius:8px; padding:10px 12px; overflow:auto; font: 13px/1.45 Consolas, "Cascadia Mono", monospace; margin:8px 0; position:relative; }
+  pre .lang { position:absolute; right:10px; top:6px; color:var(--muted); font-size:11px; font-family: "Segoe UI", sans-serif; }
+  .caret { display:inline-block; width:8px; height:16px; background:var(--fg); vertical-align:-3px; animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity:0; } }
+  footer { padding: 12px 18px 16px; }
+  .composer { max-width:860px; margin:0 auto; background:var(--panel); border-radius:14px; padding:10px 14px; display:flex; flex-direction:column; gap:8px; }
+  .composer .row { display:flex; align-items:center; gap:10px; }
+  .composer .text { flex:1; min-height:24px; color:var(--fg); }
+  .composer .text.placeholder { color:var(--muted); }
+  .send { width:34px; height:34px; border-radius:50%; background:#ececec; color:#111; display:grid; place-items:center; font-weight:700; }
+  .copyrow { display:flex; gap:10px; align-items:center; margin-top:6px; color:var(--muted); font-size:13px; }
+  .copybtn { border:1px solid #555; border-radius:6px; padding:3px 10px; color:var(--fg); }
+  .copybtn.hot { background:var(--accent); border-color:var(--accent); color:#111; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<header><span class="dot"></span> AI chat <span class="tag">any chat works: ChatGPT, Claude, Gemini…</span></header>
+<main id="main"></main>
+<footer>
+  <div class="composer">
+    <div id="chip" class="chip hidden"><span class="ico">TXT</span><span><span id="chipName">bundle</span><br><span class="meta" id="chipMeta"></span></span></div>
+    <div class="row"><div id="text" class="text placeholder">Message…</div><div class="send">↑</div></div>
+  </div>
+</footer>
+<script>
+  let shown = { phase: '' };
+  const $ = (id) => document.getElementById(id);
+  function esc(s) { return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+  function renderReply(text, upto) {
+    // very small markdown: fenced blocks + paragraphs
+    const parts = text.slice(0, upto).split(/(```[^\n]*\n[\s\S]*?(?:```|$))/);
+    return parts.map(p => {
+      const m = p.match(/^```([^\n]*)\n([\s\S]*?)(?:```|$)$/);
+      if (m) return `<pre><span class="lang">${esc(m[1])}</span>${esc(m[2])}</pre>`;
+      return p.trim() ? `<p>${esc(p.trim())}</p>` : '';
+    }).join('');
+  }
+  async function tick() {
+    try {
+      const s = await (await fetch('/state', { cache: 'no-store' })).json();
+      if (s.phase !== shown.phase || s.phase === 'streaming') { apply(s); shown = s; }
+    } catch {}
+    setTimeout(tick, 120);
+  }
+  function apply(s) {
+    const main = $('main');
+    if (s.phase === 'empty') { main.innerHTML = ''; $('chip').classList.add('hidden'); $('text').textContent = 'Message…'; $('text').classList.add('placeholder'); }
+    if (s.phase === 'pasted') {
+      $('chip').classList.remove('hidden'); $('chipName').textContent = s.chipName; $('chipMeta').textContent = s.chipMeta;
+      $('text').textContent = s.prompt; $('text').classList.remove('placeholder');
+    }
+    if (s.phase === 'sent' || s.phase === 'streaming' || s.phase === 'done') {
+      $('chip').classList.add('hidden'); $('text').textContent = 'Message…'; $('text').classList.add('placeholder');
+      const upto = s.phase === 'done' ? s.reply.length : s.upto;
+      main.innerHTML =
+        `<div class="msg user"><div class="who">You</div><div class="bubble"><div class="chip"><span class="ico">TXT</span><span>${esc(s.chipName)}<br><span class="meta">${esc(s.chipMeta)}</span></span></div><div>${esc(s.prompt)}</div></div></div>` +
+        `<div class="msg ai"><div class="who">AI</div><div class="bubble">${renderReply(s.reply, upto)}${s.phase === 'streaming' ? '<span class="caret"></span>' : ''}` +
+        (s.phase === 'done' ? `<div class="copyrow"><span class="copybtn ${s.copyHot ? 'hot' : ''}">⧉ Copy reply</span><span>then: VS Code → Apply AI Reply</span></div>` : '') + `</div></div>`;
+      main.scrollTop = main.scrollHeight;
+    }
+  }
+  tick();
+</script>
+</body>
+</html>

@@ -1,3 +1,3 @@
-# Sample project
+# sample-api
 
-Fixture workspace for the Send to AI end-to-end test.
+A tiny users API used as the fixture for Send to AI tests and the demo.
