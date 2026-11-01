@@ -20,6 +20,8 @@ fs.mkdirSync(frames, { recursive: true });
 fs.mkdirSync(path.join(fixture, 'node_modules', 'leftpad'), { recursive: true });
 fs.writeFileSync(path.join(fixture, 'node_modules', 'leftpad', 'index.js'), 'module.exports = s => s;\n');
 fs.rmSync(path.join(fixture, 'big.csv'), { force: true });   // e2e leftover, ugly in a demo
+const cleanupFixture = () => fs.rmSync(path.join(fixture, 'src', 'utils'), { recursive: true, force: true }); // file the demo reply creates
+cleanupFixture();
 
 const ps = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(here, 'capture.ps1'), frames, 'Visual Studio Code'], { stdio: 'inherit' });
 
@@ -36,6 +38,7 @@ const ps = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Fi
     code = 1;
   } finally {
     fs.writeFileSync(path.join(frames, 'STOP'), '');
+    cleanupFixture();
     await new Promise(r => ps.on('exit', r));
   }
   if (code) { process.exit(code); }
