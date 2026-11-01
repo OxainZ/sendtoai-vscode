@@ -22,7 +22,7 @@ test('verifySignature rejects a tampered body, wrong secret, or missing header',
 
 test('isFullRefund distinguishes full from partial refunds', () => {
   assert.equal(isFullRefund({ data: { attributes: { status: 'refunded' } } }), true);
-  assert.equal(isFullRefund({ data: { attributes: { status: 'partial_refund', refunded: false } } }), false);
+  assert.equal(isFullRefund({ data: { attributes: { status: 'partial_refund', refunded: true } } }), false, 'refunded flag alone is not a full refund');
   assert.equal(isFullRefund({}), false);
 });
 
@@ -50,6 +50,18 @@ test('disableKeysForOrder lists keys by order and PATCHes each enabled one', asy
 test('disableKeysForOrder surfaces an API failure so the webhook returns 500 and is retried', async () => {
   const fetchImpl = async () => ({ ok: false, status: 503 });
   await assert.rejects(() => disableKeysForOrder(1, 'k', fetchImpl), /HTTP 503/);
+  // listing succeeds but the PATCH fails: must also throw, never report success
+  const patchFails = async (url) => url.includes('/license-keys?')
+    ? { ok: true, status: 200, json: async () => ({ data: [{ id: '9', attributes: { disabled: false } }] }) }
+    : { ok: false, status: 429 };
+  await assert.rejects(() => disableKeysForOrder(1, 'k', patchFails), /disable license key 9: HTTP 429/);
+});
+
+test('dispute without an order_id is rejected with 400, never mapped to the dispute id', async () => {
+  const env = { LS_WEBHOOK_SECRET: SECRET, LS_API_KEY: 'k' };
+  const body = JSON.stringify({ meta: { event_name: 'dispute_created' }, data: { id: 777, attributes: {} } });
+  const res = await worker.fetch(new Request('https://x/webhook', { method: 'POST', body, headers: { 'X-Signature': sign(body) } }), env);
+  assert.equal(res.status, 400);
 });
 
 test('fetch handler: dispute_created revokes the keys of the disputed order', async () => {

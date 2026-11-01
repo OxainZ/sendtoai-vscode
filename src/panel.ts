@@ -6,6 +6,12 @@ import { CostEstimate } from './costEstimator';
 export type BundleMode   = 'project' | 'tabs' | 'git';
 export type OutputFormat = 'standard' | 'xml' | 'compact' | 'minimal';
 
+export type DemoAction =
+  | { type: 'click'; selector: string }
+  | { type: 'prompt'; text: string }
+  | { type: 'select'; selector: string; value: string }
+  | { type: 'scrollTop' };
+
 export interface PanelRequest {
   mode:           BundleMode;
   format:         OutputFormat;
@@ -171,7 +177,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
   }
 
   /** Demo/test hook: drive the page the way a user would (pointer + real clicks). */
-  public demo(action: { type: 'click'; selector: string } | { type: 'prompt'; text: string }): void {
+  public demo(action: DemoAction): void {
     this._view?.webview.postMessage({ command: '__demo', ...action });
   }
 
@@ -197,7 +203,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; img-src data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="${cssUri}">
 </head>
@@ -325,7 +331,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
 <button class="btn-bundle" id="bundleBtn" data-act="doBundle">
   <span id="btnIcon">📦</span>
   <span id="btnLabel">Bundle to Clipboard</span>
-  <span id="shortcutHint" style="font-size:10px;font-weight:400;opacity:0.7">Ctrl+Alt+A</span>
+  <span id="shortcutHint" style="font-size:10px;font-weight:400;opacity:0.7">Ctrl+Alt+B</span>
 </button>
 
 <!-- Smart actions (editor-native — what web bundlers can't do) -->
@@ -386,7 +392,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
   <p class="timestamp" id="ts"></p>
 </div>
 
-<p class="shortcut"><kbd>Ctrl+Alt+A</kbd> / <kbd>⌘+Alt+A</kbd></p>
+<p class="shortcut"><kbd>Ctrl+Alt+B</kbd> bundle · <kbd>Ctrl+Alt+A</kbd> copy current file</p>
 
 <script nonce="${nonce}" src="${jsUri}"></script>
 </body>

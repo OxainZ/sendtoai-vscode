@@ -92,3 +92,32 @@ test('applySearchReplace: exact, whitespace/CRLF tolerant, not-found and ambiguo
   const r3 = applySearchReplace(file, [{ search: 'nothing like this', replace: 'x' }]);
   assert.equal(r3.applied, 0); assert.match(r3.failed[0], /not found/);
 });
+
+const { groupReplyEdits } = require('../out/reply.js');
+
+test('groupReplyEdits: relativises machine paths, drops escapes, composes full + SEARCH/REPLACE, flags truncation', () => {
+  const g = groupReplyEdits([
+    { path: 'Users/me/proj/src/a.ts', kind: 'full', content: 'x' },           // C:\\Users\\me\\proj\\src\\a.ts after token extraction
+    { path: 'src/a.ts', kind: 'replace', edits: [{ search: 'x', replace: 'y' }] },
+    { path: '../etc/passwd', kind: 'full', content: 'nope' },
+    { path: './src/b.ts', kind: 'full', content: 'b', truncated: true },
+    { path: 'SRC/B.ts', kind: 'replace', edits: [{ search: 'b', replace: 'c' }] },
+  ], 'proj');
+  assert.deepEqual([...g.keys()], ['src/a.ts', 'src/b.ts']);
+  assert.deepEqual(g.get('src/a.ts'), { full: 'x', truncated: undefined, sr: [{ search: 'x', replace: 'y' }] });
+  assert.equal(g.get('src/b.ts').truncated, true, 'truncated flag survives');
+  assert.equal(g.get('src/b.ts').sr.length, 1, 'case-variant path merged');
+});
+
+test('parseReply flags a reply cut off before the closing fence', () => {
+  const edits = parseReply('```ts src/a.ts\nconst a = 1;\n// and then the chat ended');
+  assert.equal(edits.length, 1);
+  assert.equal(edits[0].truncated, true);
+});
+
+test('reply parsing stays fast on adversarial input', () => {
+  const evil = '```\n// ' + ' '.repeat(20000) + 'x*\n```\n' + 'a'.repeat(200000) + '.ts\n';
+  const t0 = Date.now();
+  parseReply(evil);
+  assert.ok(Date.now() - t0 < 500, 'must not take seconds on long/odd lines');
+});

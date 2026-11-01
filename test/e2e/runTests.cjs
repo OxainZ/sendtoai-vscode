@@ -26,6 +26,7 @@ function prepareFixture() {
     prepareFixture();
     await runTests({
       extensionDevelopmentPath: path.resolve(__dirname, '..', '..'),
+      extensionTestsEnv: { SENDTOAI_TEST_HOOKS: '1' },   // activate() only exposes _test with this set
       extensionTestsPath: path.resolve(__dirname, 'suite'),
       launchArgs: [fixture, '--disable-extensions', '--disable-workspace-trust', '--disable-gpu'],
     });

@@ -28,9 +28,6 @@ while (-not (Test-Path $stop)) {
   $proc = Get-Process -Name Code -ErrorAction SilentlyContinue | Where-Object {
     $_.MainWindowHandle -ne 0 -and $_.Path -like "*\.vscode-test\*" -and $_.MainWindowTitle -like "*sample*" -and $_.MainWindowTitle -like "*$TitleFragment*"
   } | Select-Object -First 1
-  if ($null -eq $proc -and $i -eq 0) {
-    Get-Process -Name Code -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | ForEach-Object { Add-Content (Join-Path $FramesDir "debug.txt") ("[" + [DateTime]::UtcNow.ToString("HH:mm:ss") + "] title=" + $_.MainWindowTitle + " | path=" + $_.Path) }
-  }
   if ($null -ne $proc) {
     if (-not $foregrounded) {
       # Normal (not maximised) window at a fixed 1600x1000 so the GIF stays legible,

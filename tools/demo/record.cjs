@@ -34,6 +34,7 @@ const ps = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Fi
   try {
     await runTests({
       extensionDevelopmentPath: repo,
+      extensionTestsEnv: { SENDTOAI_TEST_HOOKS: '1' },   // activate() only exposes _test with this set
       extensionTestsPath: path.join(here, 'suite'),
       launchArgs: [fixture, '--disable-extensions', '--disable-workspace-trust', '--disable-gpu'],
     });

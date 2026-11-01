@@ -17,10 +17,15 @@
 // ```` block does not end the block early.
 
 export type ReplyEdit =
-  | { path: string; kind: 'full'; content: string }
+  | { path: string; kind: 'full'; content: string; truncated?: boolean }
   | { path: string; kind: 'replace'; edits: { search: string; replace: string }[] };
 
+// Everything here runs on untrusted clipboard text on the extension host, so
+// every regex must be linear and every input bounded.
+const MAX_LABEL_LINE = 512;
+
 export function extractPathToken(s: string): string {
+  if (s.length > MAX_LABEL_LINE) { return ''; }   // a real path label is never this long
   const cleaned = s.replace(/\\/g, '/').replace(/[*`>#]/g, '').replace(/^\s*(?:file|path)\s*:/i, '').trim();
   const m = cleaned.match(/([\w][\w./-]*\.[A-Za-z][A-Za-z0-9]{0,7})\b/);
   return m ? m[1] : '';
@@ -36,10 +41,19 @@ function labelPath(line: string): string {
 
 // Recognises `// src/a.ts`, `# src/a.py`, `<!-- src/a.html -->`, a CSS block comment, `-- a.sql`
 function commentPath(line: string): string {
-  const m = line.match(/^\s*(?:\/\/|#|--|<!--|\/\*)\s*(?:file|path)?\s*:?\s*([^\s*>]+)\s*(?:-->|\*\/)?\s*$/i);
-  if (!m) { return ''; }
-  const tok = extractPathToken(m[1]);
-  return tok && tok === m[1].replace(/\\/g, '/') ? tok : '';
+  if (line.length > MAX_LABEL_LINE) { return ''; }
+  // Peel the comment markers with anchored, single-pass regexes (no nested
+  // optional groups, so no catastrophic backtracking), then require exactly
+  // one whitespace-free token to remain.
+  let t = line.trim();
+  const open = t.match(/^(?:\/\/|#|--|<!--|\/\*)/);
+  if (!open) { return ''; }
+  t = t.slice(open[0].length).trim();
+  t = t.replace(/(?:-->|\*\/)$/, '').trim();
+  t = t.replace(/^(?:file|path)[ \t]*:/i, '').trim();
+  if (!t || /\s/.test(t)) { return ''; }
+  const tok = extractPathToken(t);
+  return tok && tok === t.replace(/\\/g, '/') ? tok : '';
 }
 
 const SR_OPEN = /^\s*<{5,9} *SEARCH\s*$/;
@@ -81,6 +95,7 @@ export function parseReply(text: string): ReplyEdit[] {
       i++;
       const buf: string[] = [];
       while (i < lines.length && !closeRe.test(lines[i])) { buf.push(lines[i]); i++; }
+      const truncated = i >= lines.length;   // reply cut off before the closing fence
       pending = '';
 
       // Path as a first-line comment, or a bare path line right before SEARCH/REPLACE
@@ -97,7 +112,7 @@ export function parseReply(text: string): ReplyEdit[] {
 
       const sr = parseSearchReplace(body, 0);
       if (sr) { out.push({ path: p, kind: 'replace', edits: sr.edits }); }
-      else { out.push({ path: p, kind: 'full', content: body.join('\n') }); }
+      else { out.push({ path: p, kind: 'full', content: body.join('\n'), ...(truncated ? { truncated: true } : {}) }); }
       continue;
     }
 
@@ -110,6 +125,38 @@ export function parseReply(text: string): ReplyEdit[] {
     if (line.trim() === '') { continue; } // blank lines keep a pending label alive
     pending = labelPath(line);          // prose ("e.g.", "Node.js") never becomes a target
   }
+  return out;
+}
+
+// ── Grouping edits per file ──────────────────────────────────────────────────
+// Untrusted input rules: a path may never leave the workspace; an absolute or
+// machine-specific path (C:/Users/me/proj/src/a.ts) is relativised when it
+// contains the workspace folder name, otherwise dropped. A full-file block
+// supersedes SEARCH/REPLACE blocks that came before it for the same path;
+// SEARCH/REPLACE blocks after a full-file block are applied on top of it.
+export interface GroupedEdit { full?: string; truncated?: boolean; sr: { search: string; replace: string }[] }
+
+export function groupReplyEdits(edits: ReplyEdit[], folderName: string): Map<string, GroupedEdit> {
+  const byPath = new Map<string, GroupedEdit>();
+  for (const e of edits) {
+    let p = e.path.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '');
+    const marker = '/' + folderName + '/';
+    const idx = folderName ? ('/' + p).indexOf(marker) : -1;
+    if (idx >= 0) { p = ('/' + p).slice(idx + marker.length); }
+    p = p.replace(/^\.\//, '').replace(/^\/+/, '');
+    const norm = p.split('/').filter(Boolean).join('/');
+    if (!norm || norm === '..' || norm.startsWith('../') || norm.includes('/../') || /^[A-Za-z]:/.test(norm)) { continue; }
+    const key = norm.toLowerCase();
+    const entry = byPath.get(key) ?? { sr: [] };
+    const tagged = entry as GroupedEdit & { path?: string };
+    if (!tagged.path) { tagged.path = norm; }   // first spelling wins for case-variant duplicates
+    if (e.kind === 'full') { entry.full = e.content; entry.truncated = e.truncated; entry.sr = []; }
+    else { entry.sr.push(...e.edits); }
+    byPath.set(key, entry);
+  }
+  // key by the display path, not the lower-cased dedupe key
+  const out = new Map<string, GroupedEdit>();
+  for (const v of byPath.values()) { const { path, ...rest } = v as GroupedEdit & { path: string }; out.set(path, rest); }
   return out;
 }
 

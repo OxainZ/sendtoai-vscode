@@ -16,3 +16,6 @@ test/fixtures/sample/big.csv
 test/fixtures/sample/src/*.js
 test/fixtures/sample/src/*.js.map
 tools/demo/frames/
+worker/secret.txt
+worker/key.txt
+*-bundle.txt

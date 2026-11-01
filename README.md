@@ -29,7 +29,7 @@ No web tool that's free of an API key does this — because no web tool can see 
 
 ---
 
-## ✨ What makes it different (v3.8.0)
+## ✨ What makes it different
 
 ### 🐛 Bundle Errors — task-aware by construction
 One click bundles **only the files VS Code is reporting errors/warnings on**, with the exact diagnostics (`src/api.ts:42:7 [ERROR] Property 'id' does not exist…`) and a ready-to-paste *"please fix these"* prompt. Web bundlers can't read your Problems panel. This can.
@@ -111,7 +111,8 @@ The fastest path — open the **SendToAI** view and click:
 - Bundle project, pick output format, set a token window, estimate cost
 
 ### Keyboard shortcuts
-- `Ctrl+Alt+A` (`Cmd+Alt+A`) or `Ctrl+Alt+B` (`Cmd+Alt+B`): open the SendToAI panel, ready to bundle
+- `Ctrl+Alt+B` (`Cmd+Alt+B`): open the SendToAI panel, ready to bundle the project
+- `Ctrl+Alt+A` (`Cmd+Alt+A`): copy the current file (or selection) to the clipboard with its path
 
 ### Command Palette
 `Ctrl+Shift+P` → type **"Send to AI"** → pick any command (including Bundle Errors / Apply AI Response).
@@ -145,7 +146,7 @@ docs/
 
 ## 🤝 Works with every AI
 
-- **ChatGPT** (GPT-4, GPT-4 Turbo, and newer)
+- **ChatGPT** (GPT-5 family and newer)
 - **Claude** (Haiku, Sonnet, Opus)
 - **Google Gemini** (Pro, Ultra)
 - **Local models** (Ollama, LM Studio)
@@ -158,7 +159,7 @@ Output formats include an **XML** mode tuned for Claude and structured analysis,
 
 - ✅ **Your code stays on your machine** — bundling is 100% local; the only place it goes is the clipboard, and from there to whichever AI *you* paste it into
 - ✅ **No telemetry, no analytics** — the free tier makes zero network calls
-- ✅ **Pro license check is the one exception** — with a key set, the extension verifies it against api.lemonsqueezy.com (sends the key plus an anonymised machine identifier, cached for 24 hours). Nothing about your code is included
+- ✅ **Pro license check is the one exception** — with a key set, the extension verifies it against api.lemonsqueezy.com (sends the key plus an activation name made of your computer's hostname and a random per-install id, cached for 24 hours). Nothing about your code is included
 - ✅ **Secrets are never bundled** — `.env*`, private keys and certificates (`.pem`, `.key`, `.p12`…), `.npmrc`/`.netrc`, cloud credential files and Terraform state are always skipped, symlinks are never followed, and files over 1 MB are left out
 - ✅ **0 known vulnerabilities** — dependencies patched and pinned (`npm audit` clean)
 - ✅ **Open source** — audit it yourself
@@ -189,4 +190,4 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-**Bundle your errors + connected code for any AI, paste the answer back, apply it — no API key. Free tier, Pro is a single $9.** 🔧
+**Bundle your errors + connected code for any AI, paste the answer back, apply it — no API key. Free tier, Pro is $9.99 once.** 🔧
