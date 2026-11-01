@@ -6,6 +6,7 @@ import * as crypto from 'crypto';
 import { SendToAIPanel, PanelRequest } from './panel';
 import { buildBundle, scanProjectTree } from './bundler';
 import { parseReply, applySearchReplace } from './reply';
+import type { DemoAction } from './panel';
 import { estimateCost } from './costEstimator';
 
 const PRO_FILE_LIMIT = 50;
@@ -925,7 +926,11 @@ export function activate(context: vscode.ExtensionContext) {
     }),
   );
 
-  // Hooks for the end-to-end test (test/e2e). Not part of the public API.
+  // Hooks for the end-to-end test and the demo recorder. They exist only when
+  // the test runner sets SENDTOAI_TEST_HOOKS=1 in the extension host; a normal
+  // install exports nothing, so no other extension can drive the panel or
+  // trigger a bundle through them.
+  if (process.env.SENDTOAI_TEST_HOOKS !== '1') { return undefined; }
   return {
     _test: {
       scan: async () => {
@@ -934,7 +939,7 @@ export function activate(context: vscode.ExtensionContext) {
         return scanProjectTree(r);
       },
       bundle: handleBundle,
-      panelDemo: (a: { type: 'click'; selector: string } | { type: 'prompt'; text: string }) => panel.demo(a),
+      panelDemo: (a: DemoAction) => panel.demo(a),
       inbound: () => panel.inbound,
       isPro: () => cachedProStatus,
     },

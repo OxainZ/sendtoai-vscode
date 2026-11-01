@@ -6,6 +6,12 @@ import { CostEstimate } from './costEstimator';
 export type BundleMode   = 'project' | 'tabs' | 'git';
 export type OutputFormat = 'standard' | 'xml' | 'compact' | 'minimal';
 
+export type DemoAction =
+  | { type: 'click'; selector: string }
+  | { type: 'prompt'; text: string }
+  | { type: 'select'; selector: string; value: string }
+  | { type: 'scrollTop' };
+
 export interface PanelRequest {
   mode:           BundleMode;
   format:         OutputFormat;
@@ -171,7 +177,7 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
   }
 
   /** Demo/test hook: drive the page the way a user would (pointer + real clicks). */
-  public demo(action: { type: 'click'; selector: string } | { type: 'prompt'; text: string }): void {
+  public demo(action: DemoAction): void {
     this._view?.webview.postMessage({ command: '__demo', ...action });
   }
 
