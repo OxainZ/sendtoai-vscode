@@ -20,6 +20,8 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
   public static readonly viewType = 'sendtoai.panel';
 
   private _view?: vscode.WebviewView;
+  /** Command names received from the webview, newest last (test hook). */
+  public readonly inbound: string[] = [];
   private _lastBundle?: string;
   private _onBundle?:        (req: PanelRequest) => void;
   private _onScan?:          () => void;
@@ -85,6 +87,10 @@ export class SendToAIPanel implements vscode.WebviewViewProvider {
       presetName?: string;
       presetPaths?: string[];
     }) => {
+      // Record what the page sends (command names only) so the e2e test can
+      // prove the webview script actually ran. Capped; never holds content.
+      this.inbound.push(String(msg?.command));
+      if (this.inbound.length > 50) { this.inbound.shift(); }
       switch (msg.command) {
         case 'requestScan':
           this._onScan?.();

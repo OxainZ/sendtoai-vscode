@@ -3,6 +3,22 @@
 All notable changes to **Send to AI** are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [3.14.0] — 2026-11-01
+
+### Fixed
+- **Git Changes mode** now picks the deepest repository containing the folder
+  (a nested repo beats its parent), ignores changes outside the folder, skips
+  deleted files instead of bundling "[Error: …]" placeholders, and explains
+  itself when the Git extension is disabled or the folder is not a repo.
+- **UTF-16 files** are decoded (by byte-order mark) instead of being reported
+  as binary. UTF-8 byte-order marks are stripped.
+- A file open in two editor groups is bundled once in Open Tabs mode.
+
+### Internal
+- End-to-end test in a real VS Code on every pull request: scan, bundle to
+  clipboard, and the side panel must actually respond. Dependabot keeps
+  dependencies and Actions current.
+
 ## [3.13.1] — 2026-11-01
 
 **Hotfix: the side panel did not load in 3.11.1, 3.12.0 and 3.13.0.**
