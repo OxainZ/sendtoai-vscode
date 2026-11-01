@@ -3,7 +3,7 @@ import tseslint from 'typescript-eslint';
 import globals from 'globals';
 
 export default [
-  { ignores: ['out/**', 'node_modules/**', 'research_notes/**', 'reports/**', '*.vsix'] },
+  { ignores: ['out/**', 'node_modules/**', '.vscode-test/**', 'test/fixtures/**', 'research_notes/**', 'reports/**', '*.vsix'] },
 
   // Extension host (TypeScript)
   ...tseslint.configs.recommended.map(c => ({ ...c, files: ['src/**/*.ts'] })),
@@ -37,7 +37,7 @@ export default [
 
   // Tests (Node)
   {
-    files: ['test/**/*.cjs', 'worker/test/**/*.js'],
+    files: ['test/**/*.cjs', 'test/e2e/**/*.js', 'worker/test/**/*.js'],
     languageOptions: { sourceType: 'commonjs', globals: { ...globals.node } },
     rules: { ...js.configs.recommended.rules },
   },
