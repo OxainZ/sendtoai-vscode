@@ -32,7 +32,7 @@ the authenticated API.
 3. **Webhook**: Lemon Squeezy → Settings → Webhooks → *Add endpoint*:
    - Callback URL: `https://sendtoai-refund-hook.<you>.workers.dev/webhook`
    - Signing secret: generate a long random string (6–40 chars) and keep it
-   - Events: tick **order_refunded** only
+   - Events: tick **order_refunded** and **dispute_created**
    
    Then store the same string:
 

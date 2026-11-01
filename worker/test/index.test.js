@@ -52,6 +52,24 @@ test('disableKeysForOrder surfaces an API failure so the webhook returns 500 and
   await assert.rejects(() => disableKeysForOrder(1, 'k', fetchImpl), /HTTP 503/);
 });
 
+test('fetch handler: dispute_created revokes the disputed order's keys', async () => {
+  const env = { LS_WEBHOOK_SECRET: SECRET, LS_API_KEY: 'k' };
+  const calls = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url, method: init.method ?? 'GET' });
+    if (url.includes('/license-keys?')) { return { ok: true, status: 200, json: async () => ({ data: [{ id: '7', attributes: { disabled: false } }] }) }; }
+    return { ok: true, status: 200 };
+  };
+  try {
+    const body = JSON.stringify({ meta: { event_name: 'dispute_created' }, data: { id: 555, attributes: { order_id: 3238752 } } });
+    const res = await worker.fetch(new Request('https://x/webhook', { method: 'POST', body, headers: { 'X-Signature': sign(body) } }), env);
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { ok: true, event: 'dispute_created', orderId: 3238752, results: [{ id: '7', status: 'disabled' }] });
+    assert.ok(calls[0].url.endsWith('filter[order_id]=3238752'));
+  } finally { globalThis.fetch = realFetch; }
+});
+
 test('fetch handler: bad signature is 401, other events are acknowledged and ignored', async () => {
   const env = { LS_WEBHOOK_SECRET: SECRET, LS_API_KEY: 'k' };
   const body = JSON.stringify({ meta: { event_name: 'order_created' }, data: { id: 1, attributes: {} } });

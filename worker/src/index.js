@@ -97,6 +97,20 @@ export default {
     const orderId = payload?.data?.id;
     const testMode = payload?.meta?.test_mode ?? payload?.data?.attributes?.test_mode ?? null;
 
+    // dispute_created: a chargeback was opened. Lemon Squeezy will refund on
+    // your behalf and charge the $15 fee either way, so revoke immediately.
+    if (event === 'dispute_created') {
+      const disputedOrder = payload?.data?.attributes?.order_id ?? orderId;
+      try {
+        const results = await disableKeysForOrder(disputedOrder, env.LS_API_KEY);
+        console.log(JSON.stringify({ event, orderId: disputedOrder, testMode, results }));
+        return json({ ok: true, event, orderId: disputedOrder, results });
+      } catch (e) {
+        console.error(JSON.stringify({ event, orderId: disputedOrder, testMode, error: String(e) }));
+        return json({ ok: false, error: String(e) }, 500);
+      }
+    }
+
     if (event !== 'order_refunded') {
       return json({ ok: true, ignored: event });
     }
